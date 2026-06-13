@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using DesktopBox.ViewModels;
 using DesktopBox.Views;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DesktopBox.Controls;
 
@@ -15,7 +16,7 @@ public partial class BoxControl : UserControl
     private MainViewModel? _mainVm;
 
     private MainViewModel MainVm =>
-        _mainVm ??= App.Services.GetService(typeof(MainViewModel)) as MainViewModel;
+        _mainVm ??= App.Services.GetRequiredService<MainViewModel>();
 
     public BoxControl()
     {
@@ -48,7 +49,7 @@ public partial class BoxControl : UserControl
         if (!_isDragging) return;
         _isDragging = false;
         Mouse.Capture(null);
-        MainVm?.ScheduleSave();
+        MainVm.ScheduleSave();
     }
 
     // ---- 缩放 ----
@@ -57,7 +58,7 @@ public partial class BoxControl : UserControl
         if (Vm is null) return;
         Vm.Width = Math.Max(140, Vm.Width + e.HorizontalChange);
         Vm.Height = Math.Max(100, Vm.Height + e.VerticalChange);
-        MainVm?.ScheduleSave();
+        MainVm.ScheduleSave();
     }
 
     // ---- 拖放导入 ----
@@ -93,7 +94,7 @@ public partial class BoxControl : UserControl
         if (Vm is null) return;
         var newName = InputDialog.Prompt("重命名盒子", "请输入新的盒子名称：", Vm.Name);
         if (!string.IsNullOrWhiteSpace(newName)) Vm.Name = newName.Trim();
-        MainVm?.ScheduleSave();
+        MainVm.ScheduleSave();
     }
 
     private void OnClear(object sender, RoutedEventArgs e)
@@ -102,7 +103,7 @@ public partial class BoxControl : UserControl
         if (InputDialog.Confirm("确定清空此盒子的所有条目吗?"))
         {
             Vm.Items.Clear();
-            MainVm?.ScheduleSave();
+            MainVm.ScheduleSave();
         }
     }
 

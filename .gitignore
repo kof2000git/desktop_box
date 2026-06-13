@@ -4,7 +4,10 @@ obj/
 *.user
 *.suo
 .vs/
+
+## 构建产物(不入库,避免仓库膨胀)
 publish/
+release/
 
 ## 本地数据
 *.local.json
