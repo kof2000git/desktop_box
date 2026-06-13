@@ -1,0 +1,38 @@
+<UserControl x:Class="DesktopBox.Controls.ItemTile"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MouseDoubleClick="OnDoubleClick"
+             ToolTip="{Binding TargetPath}"
+             Cursor="Hand">
+    <UserControl.ContextMenu>
+        <ContextMenu>
+            <MenuItem Header="打开" Click="OnOpen"/>
+            <MenuItem Header="打开所在位置" Click="OnOpenLocation"/>
+            <Separator/>
+            <MenuItem Header="删除" Click="OnDelete"/>
+        </ContextMenu>
+    </UserControl.ContextMenu>
+    <StackPanel Width="68" Margin="2,3">
+        <Grid Width="44" Height="44" HorizontalAlignment="Center">
+            <Border x:Name="Fallback" CornerRadius="10" Background="#334488FF">
+                <TextBlock x:Name="FallbackText"
+                           Foreground="White"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+            </Border>
+            <Image x:Name="Icon"
+                   Width="40" Height="40"
+                   Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+        </Grid>
+        <TextBlock Text="{Binding DisplayName}"
+                   Foreground="#FFEEEEEE"
+                   FontSize="11"
+                   TextAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
+                   TextWrapping="NoWrap"
+                   Margin="0,3,0,0"/>
+    </StackPanel>
+</UserControl>
