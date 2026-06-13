@@ -1,0 +1,10 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+## 本地数据
+*.local.json
