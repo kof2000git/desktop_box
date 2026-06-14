@@ -54,8 +54,9 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public void AddItemToBox_Path_AddsItem()
+    public void AddItemToBox_Path_AddsItemWithCorrectPath()
     {
+        // 图标提取已改为后台异步,本测试只断言条目被加入且路径正确(不依赖异步时序)
         _store.Setup(s => s.Load()).Returns(new AppConfig
         {
             Boxes = new() { new Box { Name = "B" } }
@@ -70,7 +71,8 @@ public class MainViewModelTests
         {
             vm.AddItemToBox(vm.Boxes.First(), exe);
             vm.Boxes.First().Items.Should().ContainSingle();
-            vm.Boxes.First().Items[0].IconCachePath.Should().Be("/icons/x.png");
+            vm.Boxes.First().Items[0].TargetPath.Should().Be(exe);
+            vm.Boxes.First().Items[0].Type.Should().Be(ItemType.File);
         }
         finally { System.IO.File.Delete(exe); }
     }
@@ -80,8 +82,8 @@ public class MainViewModelTests
     {
         var vm = NewVm();
         vm.AddBoxCommand.Execute(null);
-        _store.Invocations.Clear(); // 排除防抖期间的调用
-        vm.Save();                   // 显式落盘
+        _store.Invocations.Clear();
+        vm.Save();
         _store.Verify(s => s.Save(It.Is<AppConfig>(c => c.Boxes.Count == 1)), Times.Once);
     }
 }

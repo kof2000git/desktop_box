@@ -15,14 +15,12 @@ public class OrganizeService : IOrganizeService
     private readonly string _manifestPath;
     private static readonly JsonSerializerOptions _opts = new(JsonSerializerDefaults.Web);
 
-    // 生产用:路径固定到 %AppData%\DesktopBox\...
+    /// <summary>生产构造:整理目录与桌面同盘且同级(瞬间移动、不占 C 盘)。</summary>
     public OrganizeService(IDesktopScannerService scanner, ICategorizerService categorizer)
-        : this(scanner, categorizer,
-               Path.Combine(AppData, "DesktopBox", "Organized"),
-               Path.Combine(AppData, "DesktopBox", "organize.json"))
+        : this(scanner, categorizer, DeriveOrganizedRoot(), Path.Combine(AppData, "DesktopBox", "organize.json"))
     { }
 
-    // 测试用:可注入临时路径
+    /// <summary>测试构造:可注入临时路径。</summary>
     public OrganizeService(IDesktopScannerService scanner, ICategorizerService categorizer,
                            string organizedRoot, string manifestPath)
     {
@@ -33,10 +31,19 @@ public class OrganizeService : IOrganizeService
     }
 
     public string OrganizedRoot => _organizedRoot;
-
     public bool HasActiveOrganize => File.Exists(_manifestPath);
-
     public int CountOrganizable() => _scanner.ScanDesktop().Count;
+
+    /// <summary>整理目录 = 桌面的同级目录下 "DesktopBox整理",确保与桌面同盘。</summary>
+    private static string DeriveOrganizedRoot()
+    {
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        var trimmed = desktop.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var parent = Path.GetDirectoryName(trimmed);
+        return string.IsNullOrEmpty(parent)
+            ? Path.Combine(desktop, ".DesktopBox整理")   // 极端兜底
+            : Path.Combine(parent, "DesktopBox整理");
+    }
 
     public OrganizeResult? Organize()
     {
@@ -48,6 +55,9 @@ public class OrganizeService : IOrganizeService
 
         foreach (var p in paths)
         {
+            // 防御:跳过整理目录自身(避免把已整理的再整理)
+            if (p.StartsWith(_organizedRoot, StringComparison.OrdinalIgnoreCase)) continue;
+
             var cat = _categorizer.Categorize(p);
             var name = DisplayName(p);
             var destDir = Path.Combine(_organizedRoot, cat);
@@ -57,13 +67,10 @@ public class OrganizeService : IOrganizeService
             var dest = UniquePath(Path.Combine(destDir, name));
             try
             {
-                if (Directory.Exists(p)) Directory.Move(p, dest);
+                if (Directory.Exists(p)) Directory.Move(p, dest);   // 同盘移动 = 改目录项,瞬间
                 else File.Move(p, dest);
             }
-            catch
-            {
-                continue; // 文件占用/权限问题:跳过,不中断
-            }
+            catch { continue; } // 占用/权限:跳过,不中断
 
             manifest.Moves.Add(new MoveRecord { OriginalPath = p, NewPath = dest, Category = cat });
             result.Entries.Add(new OrganizeEntry { Category = cat, DisplayName = name, CurrentPath = dest });
@@ -103,7 +110,7 @@ public class OrganizeService : IOrganizeService
             catch { /* 单条失败不中断还原 */ }
         }
 
-        try { File.Delete(_manifestPath); } catch { }
+        try { File.Delete(_manifestPath); } catch { } // 删除的是整理记录文件,不是用户文件
         return new OrganizeResult { Manifest = manifest };
     }
 

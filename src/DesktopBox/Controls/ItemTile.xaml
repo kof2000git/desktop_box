@@ -14,7 +14,8 @@
     </UserControl.ContextMenu>
     <StackPanel Width="68" Margin="2,3">
         <Grid Width="44" Height="44" HorizontalAlignment="Center">
-            <Border x:Name="Fallback" CornerRadius="10" Background="#334488FF">
+            <!-- 无图标时的字母占位 -->
+            <Border x:Name="Fallback" CornerRadius="10">
                 <TextBlock x:Name="FallbackText"
                            Foreground="White"
                            FontSize="22"
@@ -22,10 +23,25 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"/>
             </Border>
-            <Image x:Name="Icon"
-                   Width="40" Height="40"
+            <!-- 真实图标:绑定 IconCachePath;为空时自动隐藏,露出上面的占位 -->
+            <Image Width="40" Height="40"
                    Stretch="Uniform"
-                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   Source="{Binding IconCachePath}">
+                <Image.Style>
+                    <Style TargetType="Image">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IconCachePath}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IconCachePath}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Image.Style>
+            </Image>
         </Grid>
         <TextBlock Text="{Binding DisplayName}"
                    Foreground="#FFEEEEEE"

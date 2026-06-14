@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DesktopBox.Models;
@@ -69,8 +71,8 @@ public partial class MainViewModel : ObservableObject
 
         item.BoxId = box.Id;
         item.Order = box.Items.Count;
-        item.IconCachePath = _icon.Extract(item.TargetPath);
         box.Items.Add(item);
+        ExtractIconAsync(item);   // 单个拖入:后台提取,不阻塞
         ScheduleSave();
     }
 
@@ -99,10 +101,10 @@ public partial class MainViewModel : ObservableObject
 
         if (!InputDialog.Confirm(
             $"检测到桌面有 {count} 个项目。\n\n" +
-            "将自动按类型(程序/文档/图片/压缩包/视频/音乐/文件夹/其他)分类," +
-            "为每个分类自动创建一个盒子,并把文件移动到:\n" +
+            "将自动按类型分类(程序/文档/图片/压缩包/视频/音乐/文件夹/其他)," +
+            "为每个分类自动创建盒子,并把文件【移动】到:\n" +
             $"{_organize.OrganizedRoot}\n\n" +
-            "可用「还原整理」一键撤销。是否继续?"))
+            "(与桌面同盘,瞬间完成;可用「还原整理」一键撤销)\n是否继续?"))
             return;
 
         var result = _organize.Organize();
@@ -112,24 +114,19 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        // 按分类分组,每组建一个盒子
         var newBoxes = new List<BoxViewModel>();
+        var allItems = new List<BoxItem>();
         foreach (var g in result.Entries.GroupBy(e => e.Category).OrderBy(g => g.Key))
         {
-            var box = new BoxViewModel(new Box
-            {
-                Name = g.Key,
-                Width = 240,
-                Height = 320
-            });
+            var box = new BoxViewModel(new Box { Name = g.Key, Width = 240, Height = 320 });
             foreach (var it in g.OrderBy(e => e.DisplayName))
             {
                 var item = _parser.ParsePath(it.CurrentPath);
                 item.BoxId = box.Id;
                 item.DisplayName = it.DisplayName;
                 item.Order = box.Items.Count;
-                item.IconCachePath = _icon.Extract(it.CurrentPath);
                 box.Items.Add(item);
+                allItems.Add(item);
             }
             newBoxes.Add(box);
             Boxes.Add(box);
@@ -139,7 +136,10 @@ public partial class MainViewModel : ObservableObject
         _organize.RecordBoxIds(newBoxes.Select(b => b.Id));
         Save();
 
-        InputDialog.Inform($"整理完成!已创建 {newBoxes.Count} 个盒子,共 {result.Entries.Count} 个项目。");
+        InputDialog.Inform($"整理完成!已创建 {newBoxes.Count} 个盒子,共 {result.Entries.Count} 个项目。\n图标正在后台加载,稍候即会显示。");
+
+        // 后台提取图标:不阻塞整理流程
+        ExtractIconsInBackground(allItems);
     }
 
     [RelayCommand]
@@ -176,6 +176,21 @@ public partial class MainViewModel : ObservableObject
             newBoxes[i].Y = 40 + row * 340;
         }
     }
+
+    /// <summary>后台批量提取图标,逐个回到 UI 线程更新(BoxItem.IconCachePath 可观察,磁贴自动刷新)。</summary>
+    private void ExtractIconsInBackground(List<BoxItem> items)
+    {
+        Task.Run(() =>
+        {
+            foreach (var it in items)
+            {
+                var icon = _icon.Extract(it.TargetPath);
+                Application.Current?.Dispatcher.BeginInvoke(() => it.IconCachePath = icon);
+            }
+        });
+    }
+
+    private void ExtractIconAsync(BoxItem item) => ExtractIconsInBackground(new List<BoxItem> { item });
 
     // ---- 持久化 ----
     public void ScheduleSave()
