@@ -82,7 +82,7 @@ public partial class MainWindow : Window
 
     private void OnOpenSettings(object? sender, RoutedEventArgs? e)
     {
-        _settings.Owner = this;
+        // 不设 Owner(主窗口贴桌面层后作 Owner 会抛"未显示过"异常);屏幕居中即可
         _settings.Show();
         _settings.Activate();
     }

@@ -11,10 +11,10 @@ public partial class InputDialog : Window
     public InputDialog()
     {
         InitializeComponent();
-        Owner = Application.Current.Windows.Count > 1
-            ? Application.Current.MainWindow
-            : null;
-        if (Owner is null) WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        // 不设 Owner:主窗口被贴到桌面层(WorkerW)后,被 WPF 判为"未显示过"会导致
+        // "无法将 Owner 属性设置为之前未显示的 window" 异常。主窗口本就是全屏,
+        // 屏幕居中与父窗口居中视觉一致,直接用 CenterScreen 最稳。
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Input.Focus();
     }
 
