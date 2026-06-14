@@ -37,7 +37,7 @@ public partial class MainWindow : Window
         _tray = new Forms.NotifyIcon
         {
             Icon = MakeIcon(),
-            Text = "DesktopBox 桌面整理盒子",
+            Text = $"DesktopBox 桌面整理盒子 v{App.Version}",
             Visible = true
         };
         var menu = new Forms.ContextMenuStrip();

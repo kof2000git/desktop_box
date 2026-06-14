@@ -16,6 +16,9 @@ public partial class App : Application
     /// <summary>全局 DI 容器,供控件/窗口解析服务。</summary>
     public static IServiceProvider Services { get; private set; } = default!;
 
+    /// <summary>程序版本号(用于显示,便于确认运行的是哪个构建)。</summary>
+    public static string Version { get; } = (typeof(App).Assembly.GetName().Version?.ToString(3)) ?? "1.0";
+
     protected override void OnStartup(StartupEventArgs e)
     {
         // 关键:托盘常驻应用必须用 OnExplicitShutdown。

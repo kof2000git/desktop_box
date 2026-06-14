@@ -23,7 +23,7 @@ public partial class InputDialog : Window
     {
         var d = new InputDialog
         {
-            Title = string.IsNullOrEmpty(title) ? "DesktopBox" : title
+            Title = string.IsNullOrEmpty(title) ? $"DesktopBox v{App.Version}" : title
         };
         d.Message.Text = message;
         d.Input.Text = defaultValue;
@@ -35,7 +35,7 @@ public partial class InputDialog : Window
     /// <summary>确认框:返回是否确认。</summary>
     public static bool Confirm(string message)
     {
-        var d = new InputDialog { Title = "DesktopBox" };
+        var d = new InputDialog { Title = $"DesktopBox v{App.Version}" };
         d.Message.Text = message;
         d.Input.Visibility = Visibility.Collapsed;
         d._isConfirm = true;
@@ -47,7 +47,7 @@ public partial class InputDialog : Window
     /// <summary>纯提示框:只有一个确定按钮。</summary>
     public static void Inform(string message)
     {
-        var d = new InputDialog { Title = "DesktopBox" };
+        var d = new InputDialog { Title = $"DesktopBox v{App.Version}" };
         d.Message.Text = message;
         d.Input.Visibility = Visibility.Collapsed;
         d.CancelButton.Visibility = Visibility.Collapsed;
