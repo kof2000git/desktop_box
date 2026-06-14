@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using DesktopBox.Services;
 using DesktopBox.ViewModels;
 using DesktopBox.Views;
@@ -17,6 +18,23 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 关键:托盘常驻应用必须用 OnExplicitShutdown。
+        // 否则任何对话框/窗口关闭都可能被 WPF 当成"最后一个窗口关闭"而退出程序。
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先)
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try
+            {
+                MessageBox.Show($"发生了一个错误,但程序将继续运行:\n\n{args.Exception.Message}",
+                    "DesktopBox", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch { }
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => { /* 仅吞掉,避免静默崩溃 */ };
+
         // 单实例:防止多开导致配置打架
         _mutex = new Mutex(true, @"Global\DesktopBox_SingleInstance", out var createdNew);
         if (!createdNew)
