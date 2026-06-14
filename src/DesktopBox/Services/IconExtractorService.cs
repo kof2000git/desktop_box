@@ -18,11 +18,13 @@ public class IconExtractorService : IIconExtractorService
         try
         {
             if (string.IsNullOrEmpty(targetPath)) return null;
-            if (targetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null; // 网址无本地图标
-
             Directory.CreateDirectory(CacheDir);
 
-            // 缓存键:路径 + 修改时间,避免旧图标残留
+            // 系统图标(Shell 虚拟项,如 ::{645FF040-...})用 PIDL 方式
+            if (targetPath.StartsWith("::")) return ExtractSystemIcon(targetPath);
+
+            if (targetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+
             var stamp = "0";
             try { if (File.Exists(targetPath) || Directory.Exists(targetPath)) stamp = File.GetLastWriteTimeUtc(targetPath).Ticks.ToString(); } catch { }
             var key = (targetPath.ToLowerInvariant() + "|" + stamp).GetHashCode(StringComparison.Ordinal).ToString("x");
@@ -42,7 +44,34 @@ public class IconExtractorService : IIconExtractorService
         }
         catch
         {
-            return null; // 任何失败降级为无图标,不崩
+            return null;
         }
+    }
+
+    private string? ExtractSystemIcon(string clsidPath)
+    {
+        var key = ("sys|" + clsidPath).GetHashCode(StringComparison.Ordinal).ToString("x");
+        var png = Path.Combine(CacheDir, key + ".png");
+        if (File.Exists(png)) return png;
+
+        if (Shell32.SHParseDisplayName(clsidPath, IntPtr.Zero, out var pidl, 0, out _) != 0
+            || pidl == IntPtr.Zero) return null;
+
+        try
+        {
+            var info = new Shell32.SHFILEINFO();
+            var size = (uint)Marshal.SizeOf<Shell32.SHFILEINFO>();
+            Shell32.SHGetFileInfoByPidl(pidl, 0, ref info, size,
+                Shell32.SHGFI_PIDL | Shell32.SHGFI_ICON | Shell32.SHGFI_LARGEICON);
+            if (info.hIcon == IntPtr.Zero) return null;
+
+            using var icon = Icon.FromHandle(info.hIcon);
+            using var bmp = icon.ToBitmap();
+            bmp.Save(png, ImageFormat.Png);
+            User32.DestroyIcon(info.hIcon);
+            return png;
+        }
+        catch { return null; }
+        finally { Shell32.ILFree(pidl); }
     }
 }

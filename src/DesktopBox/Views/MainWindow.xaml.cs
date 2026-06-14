@@ -27,7 +27,7 @@ public partial class MainWindow : Window
         Top = 0;
         Width = SystemParameters.PrimaryScreenWidth;
         Height = SystemParameters.PrimaryScreenHeight;
-        _vm.ScreenWidth = Width; // 用于整理时自动布局新盒子
+        _vm.ScreenWidth = Width;
 
         SetupTray();
     }
@@ -43,8 +43,10 @@ public partial class MainWindow : Window
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示盒子", null, (_, _) => ShowBoxes());
         menu.Items.Add("新建盒子", null, (_, _) => _vm.AddBoxCommand.Execute(null));
+        menu.Items.Add("添加系统图标盒子", null, (_, _) => _vm.AddSystemIconsBoxCommand.Execute(null));
         menu.Items.Add("一键整理桌面", null, (_, _) => _vm.OrganizeCommand.Execute(null));
         menu.Items.Add("还原整理", null, (_, _) => _vm.RestoreOrganizeCommand.Execute(null));
+        menu.Items.Add("隐藏/显示桌面图标", null, (_, _) => _vm.ToggleDesktopIconsCommand.Execute(null));
         menu.Items.Add("设置", null, (_, _) => OnOpenSettings(null, null));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => OnQuit(null, null));
@@ -58,7 +60,6 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    /// <summary>用 GDI+ 现场画一个方块当托盘图标,无需 .ico 文件。</summary>
     private static System.Drawing.Icon MakeIcon()
     {
         using var bmp = new Bitmap(32, 32);
@@ -74,10 +75,10 @@ public partial class MainWindow : Window
     }
 
     private void OnNewBox(object sender, RoutedEventArgs e) => _vm.AddBoxCommand.Execute(null);
-
+    private void OnAddSystemIcons(object sender, RoutedEventArgs e) => _vm.AddSystemIconsBoxCommand.Execute(null);
     private void OnOrganize(object sender, RoutedEventArgs e) => _vm.OrganizeCommand.Execute(null);
-
     private void OnRestoreOrganize(object sender, RoutedEventArgs e) => _vm.RestoreOrganizeCommand.Execute(null);
+    private void OnToggleIcons(object sender, RoutedEventArgs e) => _vm.ToggleDesktopIconsCommand.Execute(null);
 
     private void OnOpenSettings(object? sender, RoutedEventArgs? e)
     {
@@ -93,7 +94,6 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
-    // 关闭窗口 = 缩到托盘(不退出)
     protected override void OnClosing(CancelEventArgs e)
     {
         if (_tray is { Visible: true })

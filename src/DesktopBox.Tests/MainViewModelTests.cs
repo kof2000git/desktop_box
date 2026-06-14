@@ -12,6 +12,7 @@ public class MainViewModelTests
     private readonly Mock<IPersistenceService> _store = new();
     private readonly Mock<IIconExtractorService> _icon = new();
     private readonly Mock<IOrganizeService> _organize = new();
+    private readonly Mock<IDesktopIconsService> _desktopIcons = new();
 
     private MainViewModel NewVm()
     {
@@ -20,7 +21,8 @@ public class MainViewModelTests
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns((string?)null);
         _organize.SetupGet(o => o.HasActiveOrganize).Returns(false);
         _organize.Setup(o => o.CountOrganizable()).Returns(0);
-        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
+        _desktopIcons.SetupGet(d => d.AreIconsVisible).Returns(true);
+        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
     }
 
     [Fact]
@@ -48,7 +50,7 @@ public class MainViewModelTests
         {
             Boxes = new() { new Box { Name = "已存在" } }
         });
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
         vm.LoadCommand.Execute(null);
         vm.Boxes.Should().ContainSingle(b => b.Name == "已存在");
     }
@@ -56,13 +58,12 @@ public class MainViewModelTests
     [Fact]
     public void AddItemToBox_Path_AddsItemWithCorrectPath()
     {
-        // 图标提取已改为后台异步,本测试只断言条目被加入且路径正确(不依赖异步时序)
         _store.Setup(s => s.Load()).Returns(new AppConfig
         {
             Boxes = new() { new Box { Name = "B" } }
         });
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns("/icons/x.png");
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
         vm.LoadCommand.Execute(null);
 
         var exe = System.IO.Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".exe");
@@ -86,4 +87,8 @@ public class MainViewModelTests
         vm.Save();
         _store.Verify(s => s.Save(It.Is<AppConfig>(c => c.Boxes.Count == 1)), Times.Once);
     }
+
+    // ToggleDesktopIcons 依赖 GUI 对话框(InputDialog.Inform),命令末尾会弹窗,
+    // 无法在无界面测试中执行。其逻辑仅为"翻转并调用 SetVisible",靠桌面图标服务的
+    // 手动验证覆盖。
 }

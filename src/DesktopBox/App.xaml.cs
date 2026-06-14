@@ -73,6 +73,7 @@ public partial class App : Application
         s.AddSingleton<ICategorizerService, CategorizerService>();
         s.AddSingleton<IDesktopScannerService, DesktopScannerService>();
         s.AddSingleton<IOrganizeService, OrganizeService>();
+        s.AddSingleton<IDesktopIconsService, DesktopIconsService>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();
         s.AddSingleton<MainWindow>();

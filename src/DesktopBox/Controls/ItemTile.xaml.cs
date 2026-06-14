@@ -16,7 +16,6 @@ public partial class ItemTile : UserControl
         DataContextChanged += (_, _) => SetFallback();
     }
 
-    /// <summary>无图标时显示的首字母 + 配色(图标异步到达后,绑定会自动覆盖)。</summary>
     private void SetFallback()
     {
         if (DataContext is not BoxItem item) return;
@@ -38,10 +37,11 @@ public partial class ItemTile : UserControl
 
     private static Color GetFallbackColor(BoxItem item) => item.Type switch
     {
-        ItemType.Folder   => Color.FromRgb(0x4C, 0xAF, 0x50),
-        ItemType.Url      => Color.FromRgb(0x1E, 0x88, 0xE5),
-        ItemType.Shortcut => Color.FromRgb(0x8E, 0x24, 0xAA),
-        _                 => Color.FromRgb(0x6D, 0x4C, 0x41)
+        ItemType.Folder     => Color.FromRgb(0x4C, 0xAF, 0x50),
+        ItemType.Url        => Color.FromRgb(0x1E, 0x88, 0xE5),
+        ItemType.Shortcut   => Color.FromRgb(0x8E, 0x24, 0xAA),
+        ItemType.SystemIcon => Color.FromRgb(0xF5, 0xA6, 0x23), // 琥珀
+        _                   => Color.FromRgb(0x6D, 0x4C, 0x41)
     };
 
     private BoxItem? Item => DataContext as BoxItem;
@@ -52,7 +52,14 @@ public partial class ItemTile : UserControl
     private void OpenItem()
     {
         if (Item is null) return;
-        try { Process.Start(new ProcessStartInfo(Item.TargetPath) { UseShellExecute = true }); }
+        try
+        {
+            // 系统图标(Shell 虚拟项)用 explorer 打开 ::{CLSID}
+            if (Item.Type == ItemType.SystemIcon || Item.TargetPath.StartsWith("::"))
+                Process.Start(new ProcessStartInfo("explorer.exe", Item.TargetPath) { UseShellExecute = true });
+            else
+                Process.Start(new ProcessStartInfo(Item.TargetPath) { UseShellExecute = true });
+        }
         catch (Exception ex)
         {
             MessageBox.Show($"无法打开:{ex.Message}", "DesktopBox", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -62,7 +69,12 @@ public partial class ItemTile : UserControl
     private void OnOpenLocation(object sender, RoutedEventArgs e)
     {
         if (Item is null) return;
-        if (Item.Type == ItemType.Url) { OpenItem(); return; }
+        // 系统图标与网址没有"所在文件夹",直接打开它
+        if (Item.Type == ItemType.SystemIcon || Item.Type == ItemType.Url || Item.TargetPath.StartsWith("::"))
+        {
+            OpenItem();
+            return;
+        }
         try
         {
             var dir = Path.GetDirectoryName(Item.TargetPath) ?? "";

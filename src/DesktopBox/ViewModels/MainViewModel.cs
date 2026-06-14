@@ -17,6 +17,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IDropParserService _parser;
     private readonly IIconExtractorService _icon;
     private readonly IOrganizeService _organize;
+    private readonly IDesktopIconsService _desktopIcons;
     private Timer? _debounce;
 
     public ObservableCollection<BoxViewModel> Boxes { get; } = new();
@@ -25,12 +26,14 @@ public partial class MainViewModel : ObservableObject
     public double ScreenWidth { get; set; } = 1600;
 
     public MainViewModel(IPersistenceService store, IDropParserService parser,
-                         IIconExtractorService icon, IOrganizeService organize)
+                         IIconExtractorService icon, IOrganizeService organize,
+                         IDesktopIconsService desktopIcons)
     {
         _store = store;
         _parser = parser;
         _icon = icon;
         _organize = organize;
+        _desktopIcons = desktopIcons;
     }
 
     [RelayCommand]
@@ -82,7 +85,7 @@ public partial class MainViewModel : ObservableObject
         ScheduleSave();
     }
 
-    // ---- 一键整理 ----
+    // ---- 一键整理(只引用、不移动)----
     [RelayCommand]
     private void Organize()
     {
@@ -101,16 +104,16 @@ public partial class MainViewModel : ObservableObject
 
         if (!InputDialog.Confirm(
             $"检测到桌面有 {count} 个项目。\n\n" +
-            "将自动按类型分类(程序/文档/图片/压缩包/视频/音乐/文件夹/其他)," +
-            "为每个分类自动创建盒子,并把文件【移动】到:\n" +
-            $"{_organize.OrganizedRoot}\n\n" +
-            "(与桌面同盘,瞬间完成;可用「还原整理」一键撤销)\n是否继续?"))
+            "将自动按类型(程序/文档/图片/压缩包/视频/音乐/文件夹/其他)分类," +
+            "为每个分类自动创建盒子,并【引用】桌面上的文件。\n\n" +
+            "✅ 文件不会被移动,写死桌面路径的其它程序/脚本照常工作。\n\n" +
+            "是否继续?\n(可用「还原整理」删除这些盒子)"))
             return;
 
         var result = _organize.Organize();
         if (result is null || result.Entries.Count == 0)
         {
-            InputDialog.Inform("没有可整理的项目(可能文件被占用)。");
+            InputDialog.Inform("没有可整理的项目。");
             return;
         }
 
@@ -136,9 +139,8 @@ public partial class MainViewModel : ObservableObject
         _organize.RecordBoxIds(newBoxes.Select(b => b.Id));
         Save();
 
-        InputDialog.Inform($"整理完成!已创建 {newBoxes.Count} 个盒子,共 {result.Entries.Count} 个项目。\n图标正在后台加载,稍候即会显示。");
+        InputDialog.Inform($"整理完成!已创建 {newBoxes.Count} 个盒子,共 {result.Entries.Count} 个项目。\n(文件未移动,图标稍候加载。)\n\n想让桌面更干净?可用「隐藏/显示桌面图标」隐藏原始图标。");
 
-        // 后台提取图标:不阻塞整理流程
         ExtractIconsInBackground(allItems);
     }
 
@@ -151,7 +153,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (!InputDialog.Confirm("将把所有已整理的项目移回桌面,并删除自动生成的盒子。\n是否继续?"))
+        if (!InputDialog.Confirm("将删除这次自动生成的分类盒子。\n(文件从未移动,无需移回;手动建的盒子不受影响)\n是否继续?"))
             return;
 
         var result = _organize.Restore();
@@ -162,7 +164,58 @@ public partial class MainViewModel : ObservableObject
         }
         Save();
 
-        InputDialog.Inform("已还原:文件已移回桌面,自动生成的盒子已删除。");
+        InputDialog.Inform("已删除自动生成的分类盒子。文件仍在桌面原处。");
+    }
+
+    // ---- 系统图标盒子(回收站/此电脑/控制面板)----
+    [RelayCommand]
+    private void AddSystemIconsBox()
+    {
+        if (Boxes.Any(b => b.Name == "系统图标"))
+        {
+            InputDialog.Inform("已经存在「系统图标」盒子了。");
+            return;
+        }
+
+        var box = new BoxViewModel(new Box { Name = "系统图标", Width = 240, Height = 200 });
+        var items = new List<BoxItem>();
+        foreach (var def in SystemIcons.Definitions)
+        {
+            var item = new BoxItem
+            {
+                Type = ItemType.SystemIcon,
+                TargetPath = def.Clsid,
+                DisplayName = def.Name,
+                BoxId = box.Id,
+                Order = box.Items.Count
+            };
+            box.Items.Add(item);
+            items.Add(item);
+        }
+
+        PlaceBoxAtNextSlot(box);
+        Boxes.Add(box);
+        Save();
+        ExtractIconsInBackground(items);
+    }
+
+    private void PlaceBoxAtNextSlot(BoxViewModel box)
+    {
+        int idx = Boxes.Count;
+        int cols = Math.Max(1, (int)((ScreenWidth - 40) / 260));
+        box.X = 40 + (idx % cols) * 260;
+        box.Y = 40 + (idx / cols) * 340;
+    }
+
+    // ---- 桌面图标显隐(纯视觉,不动文件)----
+    [RelayCommand]
+    private void ToggleDesktopIcons()
+    {
+        var visible = !_desktopIcons.AreIconsVisible;
+        _desktopIcons.SetVisible(visible);
+        InputDialog.Inform(visible
+            ? "已显示桌面图标。"
+            : "已隐藏桌面图标。\n(文件没有移动,只是视觉隐藏;再次点击可恢复)");
     }
 
     private void LayoutNewBoxes(List<BoxViewModel> newBoxes)
