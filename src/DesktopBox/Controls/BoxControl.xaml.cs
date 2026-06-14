@@ -100,7 +100,7 @@ public partial class BoxControl : UserControl
     private void OnClear(object sender, RoutedEventArgs e)
     {
         if (Vm is null || Vm.Items.Count == 0) return;
-        if (InputDialog.Confirm("确定清空此盒子的所有条目吗?"))
+        if (InputDialog.Confirm("确定清空此盒子的所有条目吗?\n(只是从盒子里移除显示,文件不会被删除)"))
         {
             Vm.Items.Clear();
             MainVm.ScheduleSave();
@@ -110,7 +110,20 @@ public partial class BoxControl : UserControl
     private void OnDelete(object sender, RoutedEventArgs e)
     {
         if (Vm is null) return;
-        if (InputDialog.Confirm($"确定删除盒子「{Vm.Name}」吗?"))
+
+        // 非空盒子不允许直接删除,避免用户误以为文件丢失
+        if (Vm.Items.Count > 0)
+        {
+            InputDialog.Inform(
+                $"盒子「{Vm.Name}」里还有 {Vm.Items.Count} 个项目,为防止误以为文件丢失,不允许直接删除非空盒子。\n\n" +
+                "如确实要删除:\n" +
+                "• 先点「清空盒子」移除里面的条目(文件仍在原处,不会被删),再删盒子\n" +
+                "• 或把不需要的图标逐个删除\n\n" +
+                "如果这是一键整理生成的盒子、想恢复桌面,请用「还原整理」。");
+            return;
+        }
+
+        if (InputDialog.Confirm($"确定删除空盒子「{Vm.Name}」吗?"))
             MainVm.RemoveBoxCommand.Execute(Vm);
     }
 }
