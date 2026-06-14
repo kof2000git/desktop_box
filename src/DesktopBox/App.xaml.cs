@@ -52,6 +52,9 @@ public partial class App : Application
         s.AddSingleton<IDesktopService, DesktopLayerService>();
         s.AddSingleton<IThemeService, ThemeService>();
         s.AddSingleton<IStartupService, StartupService>();
+        s.AddSingleton<ICategorizerService, CategorizerService>();
+        s.AddSingleton<IDesktopScannerService, DesktopScannerService>();
+        s.AddSingleton<IOrganizeService, OrganizeService>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();
         s.AddSingleton<MainWindow>();

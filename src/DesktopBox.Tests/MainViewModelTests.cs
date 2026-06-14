@@ -11,13 +11,16 @@ public class MainViewModelTests
 {
     private readonly Mock<IPersistenceService> _store = new();
     private readonly Mock<IIconExtractorService> _icon = new();
+    private readonly Mock<IOrganizeService> _organize = new();
 
     private MainViewModel NewVm()
     {
         _store.Reset();
         _store.Setup(s => s.Load()).Returns(new AppConfig());
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns((string?)null);
-        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object);
+        _organize.SetupGet(o => o.HasActiveOrganize).Returns(false);
+        _organize.Setup(o => o.CountOrganizable()).Returns(0);
+        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
     }
 
     [Fact]
@@ -45,7 +48,7 @@ public class MainViewModelTests
         {
             Boxes = new() { new Box { Name = "已存在" } }
         });
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
         vm.LoadCommand.Execute(null);
         vm.Boxes.Should().ContainSingle(b => b.Name == "已存在");
     }
@@ -58,7 +61,7 @@ public class MainViewModelTests
             Boxes = new() { new Box { Name = "B" } }
         });
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns("/icons/x.png");
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object);
         vm.LoadCommand.Execute(null);
 
         var exe = System.IO.Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".exe");

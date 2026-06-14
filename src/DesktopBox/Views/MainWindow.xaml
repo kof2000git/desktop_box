@@ -16,6 +16,8 @@
         <Canvas.ContextMenu>
             <ContextMenu>
                 <MenuItem Header="新建盒子" Click="OnNewBox"/>
+                <MenuItem Header="一键整理桌面" Click="OnOrganize" FontWeight="SemiBold"/>
+                <MenuItem Header="还原整理" Click="OnRestoreOrganize"/>
                 <MenuItem Header="设置" Click="OnOpenSettings"/>
                 <Separator/>
                 <MenuItem Header="退出" Click="OnQuit"/>

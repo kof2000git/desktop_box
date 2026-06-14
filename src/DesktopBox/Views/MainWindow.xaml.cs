@@ -27,6 +27,7 @@ public partial class MainWindow : Window
         Top = 0;
         Width = SystemParameters.PrimaryScreenWidth;
         Height = SystemParameters.PrimaryScreenHeight;
+        _vm.ScreenWidth = Width; // 用于整理时自动布局新盒子
 
         SetupTray();
     }
@@ -42,6 +43,8 @@ public partial class MainWindow : Window
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示盒子", null, (_, _) => ShowBoxes());
         menu.Items.Add("新建盒子", null, (_, _) => _vm.AddBoxCommand.Execute(null));
+        menu.Items.Add("一键整理桌面", null, (_, _) => _vm.OrganizeCommand.Execute(null));
+        menu.Items.Add("还原整理", null, (_, _) => _vm.RestoreOrganizeCommand.Execute(null));
         menu.Items.Add("设置", null, (_, _) => OnOpenSettings(null, null));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => OnQuit(null, null));
@@ -71,6 +74,10 @@ public partial class MainWindow : Window
     }
 
     private void OnNewBox(object sender, RoutedEventArgs e) => _vm.AddBoxCommand.Execute(null);
+
+    private void OnOrganize(object sender, RoutedEventArgs e) => _vm.OrganizeCommand.Execute(null);
+
+    private void OnRestoreOrganize(object sender, RoutedEventArgs e) => _vm.RestoreOrganizeCommand.Execute(null);
 
     private void OnOpenSettings(object? sender, RoutedEventArgs? e)
     {
