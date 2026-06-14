@@ -184,8 +184,14 @@ public partial class MainViewModel : ObservableObject
         {
             foreach (var it in items)
             {
-                var icon = _icon.Extract(it.TargetPath);
-                Application.Current?.Dispatcher.BeginInvoke(() => it.IconCachePath = icon);
+                try
+                {
+                    var icon = _icon.Extract(it.TargetPath);
+                    var disp = Application.Current?.Dispatcher;
+                    if (disp is null || disp.HasShutdownStarted) continue;
+                    disp.BeginInvoke(new Action(() => it.IconCachePath = icon));
+                }
+                catch { /* 程序退出中或其他异常,忽略 */ }
             }
         });
     }
@@ -205,15 +211,20 @@ public partial class MainViewModel : ObservableObject
 
     public void Save()
     {
-        var existing = _store.Load();
-        var cfg = new AppConfig { Settings = existing.Settings };
-        int order = 0;
-        foreach (var b in Boxes)
+        try
         {
-            var m = b.ToModel();
-            m.Order = order++;
-            cfg.Boxes.Add(m);
+            var existing = _store.Load();
+            var cfg = new AppConfig { Settings = existing.Settings };
+            int order = 0;
+            // 快照:避免后台线程枚举时集合被 UI 线程修改
+            foreach (var b in Boxes.ToList())
+            {
+                var m = b.ToModel();
+                m.Order = order++;
+                cfg.Boxes.Add(m);
+            }
+            _store.Save(cfg);
         }
-        _store.Save(cfg);
+        catch { /* 落盘失败不应影响使用,也不弹吓人错误框 */ }
     }
 }
