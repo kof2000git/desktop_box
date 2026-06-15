@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using DesktopBox.Models;
+using DesktopBox.Views;
 
 namespace DesktopBox.Controls;
 
@@ -134,6 +135,13 @@ public partial class ItemTile : UserControl
     private void OpenItem()
     {
         if (Item is null) return;
+        // 引用式盒子兜底:目标可能已被外部删除/移动(此时盒子里还留着悬空引用)。
+        // 双击前校验,失效则提示并移除——避免直接 Process.Start 已失效路径而抛 Win32 错误。
+        if (IsLocalPathItem(Item) && !TargetExists(Item.TargetPath))
+        {
+            NotifyGoneAndRemove();
+            return;
+        }
         try
         {
             if (Item.Type == ItemType.SystemIcon || Item.TargetPath.StartsWith("::"))
@@ -165,7 +173,33 @@ public partial class ItemTile : UserControl
         int result = 0;
         try { result = ShowShellMenu(Item.TargetPath, (int)pt.X, (int)pt.Y); }
         catch (Exception ex) { App.LogError(ex, "ItemTile.ShowShellMenu"); }   // DLL 缺失/P-Invoke 失败时记录
-        if (result == 0x7000) RemoveFromBox();
+        if (result == 0x7000) { RemoveFromBox(); return; }
+
+        // 原生菜单可能执行了"删除/剪切/重命名"等命令,使目标路径失效。盒子是引用式的(只存路径),
+        // 需校验刷新:延一帧(等 InvokeCommand 的同步删除落地)后若路径已失效,自动移除并提示,
+        // 让"右键删文件→磁贴立即消失",而不是残留成悬空引用、等双击才发现。
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (Item is not null && IsLocalPathItem(Item) && !TargetExists(Item.TargetPath))
+                NotifyGoneAndRemove();
+        }));
+    }
+
+    /// <summary>是否为本地路径类条目(非系统图标/网址/::虚拟项)——这类才需校验文件存在性。</summary>
+    private static bool IsLocalPathItem(BoxItem item) =>
+        item.Type != ItemType.SystemIcon && item.Type != ItemType.Url
+        && !item.TargetPath.StartsWith("::", StringComparison.Ordinal);
+
+    /// <summary>目标路径是否存在(文件或目录)。</summary>
+    private static bool TargetExists(string path) =>
+        File.Exists(path) || Directory.Exists(path);
+
+    /// <summary>目标已失效时:友好提示并从盒子移除该引用(不删任何文件)。</summary>
+    private void NotifyGoneAndRemove()
+    {
+        if (Item is null) return;
+        InputDialog.Inform($"「{Item.DisplayName}」的目标已不存在(可能被删除或移动),已从盒子移除该条目。\n(仅取消盒内显示,文件本体不受影响。)");
+        RemoveFromBox();
     }
 
     private ContextMenu BuildContextMenu()
