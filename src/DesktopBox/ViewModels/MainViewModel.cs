@@ -425,7 +425,10 @@ public partial class MainViewModel : ObservableObject
     /// <summary>为详细信息视图惰性填充每个条目的大小/修改时间(后台线程,逐个回 UI 更新)。</summary>
     public void EnsureDetailFields(BoxViewModel box)
     {
-        var items = box.DisplayItems.Where(i => i.ModifiedText is null).ToList();
+        // 收集所有条目:标签模式要覆盖每个标签(不只当前选中标签)——否则切到其它标签时,
+        // 那些标签的 ModifiedText 仍是 null,详细信息视图里就不显示修改时间(“有的标签有,有的没有”)。
+        var source = box.IsTabbed ? box.Tabs.SelectMany(t => t.Items) : box.Items;
+        var items = source.Where(i => i.ModifiedText is null).ToList();
         if (items.Count == 0) return;
         Task.Run(() =>
         {

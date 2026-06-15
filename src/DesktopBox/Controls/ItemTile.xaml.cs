@@ -57,75 +57,142 @@ public partial class ItemTile : UserControl
         return char.ToUpperInvariant(c).ToString();
     }
 
-    /// <summary>根据 TileSize 调整容器方向、图标尺寸、详情可见性。</summary>
+    /// <summary>根据 TileSize 调整行列定义、图标尺寸、详情可见性。</summary>
     private static void OnIconSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((ItemTile)d).ApplyLayout();
+
+    // GridLength 预设:Star=弹性占满,Auto=按内容,Fix=固定像素
+    private static readonly GridLength Star = new(1, GridUnitType.Star);
+    private static readonly GridLength Auto = GridLength.Auto;
+    private static GridLength Fix(double v) => new(v, GridUnitType.Pixel);
+
+    // 详细信息模式详情列固定宽度(所有磁贴一致 → 每行修改时间/大小对齐)
+    private const double DetailModifiedWidth = 108;  // 容纳 "yyyy-MM-dd HH:mm"(9pt)
+    private const double DetailSizeWidth = 68;       // 容纳 "999.9 GB"(9pt)
 
     private void ApplyLayout()
     {
         if (!IsInitialized) return;
         var size = IconSize;
 
+        // 重置:避免切换模式时残留上一个模式的 ColumnSpan/RowSpan/VerticalAlignment
+        foreach (var child in new UIElement[] { IconBox, NameText, ModifiedText, SizeText })
+        {
+            Grid.SetColumnSpan(child, 1);
+            Grid.SetRowSpan(child, 1);
+        }
+        IconBox.HorizontalAlignment = HorizontalAlignment.Center;
+        IconBox.VerticalAlignment = VerticalAlignment.Top;
+        ModifiedText.Visibility = Visibility.Collapsed;
+        SizeText.Visibility = Visibility.Collapsed;
+
         switch (size)
         {
             case TileSize.Large:
-                Panel.Orientation = Orientation.Vertical;
-                SetIcon(56, 50, 28, HorizontalAlignment.Center);
+                // 纵向卡片:图标上、名称下。名称靠单列 * 宽限制(磁贴宽),不再 MaxWidth 硬截断。
+                SetCols(LayoutGrid, Star);
+                SetRows(LayoutGrid, Auto, Auto);
+                Place(IconBox, 0, 0); Place(NameText, 0, 1);
+                SetIcon(56, 50, 28);
                 NameText.TextAlignment = TextAlignment.Center;
                 NameText.FontSize = 12;
-                NameText.MaxWidth = 140;
-                DetailBox.Visibility = Visibility.Collapsed;
-                Root.Padding = new Thickness(4);
+                NameText.VerticalAlignment = VerticalAlignment.Top;
+                NameText.Margin = new Thickness(0, 3, 0, 0);
                 break;
             case TileSize.Medium:
-                Panel.Orientation = Orientation.Vertical;
-                SetIcon(44, 38, 22, HorizontalAlignment.Center);
+                SetCols(LayoutGrid, Star);
+                SetRows(LayoutGrid, Auto, Auto);
+                Place(IconBox, 0, 0); Place(NameText, 0, 1);
+                SetIcon(44, 38, 22);
                 NameText.TextAlignment = TextAlignment.Center;
                 NameText.FontSize = 11;
-                NameText.MaxWidth = 120;
-                DetailBox.Visibility = Visibility.Collapsed;
+                NameText.VerticalAlignment = VerticalAlignment.Top;
+                NameText.Margin = new Thickness(0, 3, 0, 0);
                 break;
             case TileSize.Small:
             case TileSize.List:
-                // 图标在左,名称在右
-                Panel.Orientation = Orientation.Horizontal;
-                SetIcon(26, 22, 15, HorizontalAlignment.Center);
+                // 横向:图标 | 名称(*)。名称 * 列填满可用宽度,有空间就显示全名。
+                SetCols(LayoutGrid, Auto, Star);
+                SetRows(LayoutGrid, Auto);
+                Place(IconBox, 0, 0); Place(NameText, 1, 0);
+                SetIcon(26, 22, 15);
+                IconBox.HorizontalAlignment = HorizontalAlignment.Left;
+                IconBox.VerticalAlignment = VerticalAlignment.Center;
                 NameText.TextAlignment = TextAlignment.Left;
                 NameText.FontSize = 12;
                 NameText.VerticalAlignment = VerticalAlignment.Center;
                 NameText.Margin = new Thickness(6, 0, 4, 0);
-                DetailBox.Visibility = Visibility.Collapsed;
                 break;
             case TileSize.Detail:
-                Panel.Orientation = Orientation.Horizontal;
-                SetIcon(26, 22, 15, HorizontalAlignment.Center);
+                // 表格:图标 | 名称(*) | 修改时间(固定) | 大小(固定)。
+                // 名称 * 占满中间;修改时间/大小固定列宽,保证每行同列对齐。
+                SetCols(LayoutGrid, Auto, Star, Fix(DetailModifiedWidth), Fix(DetailSizeWidth));
+                SetRows(LayoutGrid, Auto);
+                Place(IconBox, 0, 0); Place(NameText, 1, 0);
+                Place(ModifiedText, 2, 0); Place(SizeText, 3, 0);
+                SetIcon(26, 22, 15);
+                IconBox.HorizontalAlignment = HorizontalAlignment.Left;
+                IconBox.VerticalAlignment = VerticalAlignment.Center;
                 NameText.TextAlignment = TextAlignment.Left;
                 NameText.FontSize = 12;
                 NameText.VerticalAlignment = VerticalAlignment.Center;
-                NameText.Margin = new Thickness(6, 0, 4, 0);
-                DetailBox.Visibility = Visibility.Visible;
-                DetailBox.Orientation = Orientation.Horizontal;
-                DetailBox.Margin = new Thickness(10, 0, 0, 0);
+                NameText.Margin = new Thickness(6, 0, 8, 0);
+                ModifiedText.Visibility = Visibility.Visible;
+                SizeText.Visibility = Visibility.Visible;
+                ModifiedText.VerticalAlignment = VerticalAlignment.Center;
+                ModifiedText.Margin = new Thickness(0, 0, 8, 0);
+                SizeText.VerticalAlignment = VerticalAlignment.Center;
                 break;
             case TileSize.Tile:
-                Panel.Orientation = Orientation.Horizontal;
-                SetIcon(44, 38, 22, HorizontalAlignment.Center);
+                // 平铺卡片:图标 | (名称 / 修改时间 / 大小 垂直堆叠)。
+                SetCols(LayoutGrid, Auto, Star);
+                SetRows(LayoutGrid, Auto, Auto, Auto);
+                Place(IconBox, 0, 0, rowSpan: 3);
+                Place(NameText, 1, 0);
+                Place(ModifiedText, 1, 1);
+                Place(SizeText, 1, 2);
+                SetIcon(44, 38, 22);
+                IconBox.HorizontalAlignment = HorizontalAlignment.Left;
+                IconBox.VerticalAlignment = VerticalAlignment.Center;
                 NameText.TextAlignment = TextAlignment.Left;
                 NameText.FontSize = 12;
-                NameText.VerticalAlignment = VerticalAlignment.Center;
-                NameText.Margin = new Thickness(8, 0, 8, 0);
-                DetailBox.Visibility = Visibility.Visible;
-                DetailBox.Orientation = Orientation.Vertical;
+                NameText.VerticalAlignment = VerticalAlignment.Top;
+                NameText.Margin = new Thickness(8, 2, 8, 2);
+                ModifiedText.Visibility = Visibility.Visible;
+                SizeText.Visibility = Visibility.Visible;
+                ModifiedText.VerticalAlignment = VerticalAlignment.Center;
+                ModifiedText.Margin = new Thickness(8, 0, 8, 1);
+                SizeText.VerticalAlignment = VerticalAlignment.Center;
+                SizeText.Margin = new Thickness(8, 0, 8, 2);
                 break;
         }
     }
 
-    private void SetIcon(double box, double img, double fallbackFont, HorizontalAlignment align)
+    private static void SetCols(Grid g, params GridLength[] widths)
+    {
+        g.ColumnDefinitions.Clear();
+        foreach (var w in widths) g.ColumnDefinitions.Add(new ColumnDefinition { Width = w });
+    }
+
+    private static void SetRows(Grid g, params GridLength[] heights)
+    {
+        g.RowDefinitions.Clear();
+        foreach (var h in heights) g.RowDefinitions.Add(new RowDefinition { Height = h });
+    }
+
+    private static void Place(UIElement e, int col, int row, int colSpan = 1, int rowSpan = 1)
+    {
+        Grid.SetColumn(e, col);
+        Grid.SetRow(e, row);
+        Grid.SetColumnSpan(e, colSpan);
+        Grid.SetRowSpan(e, rowSpan);
+    }
+
+    private void SetIcon(double box, double img, double fallbackFont)
     {
         IconBox.Width = box; IconBox.Height = box;
         Img.Width = img; Img.Height = img;
         FallbackText.FontSize = fallbackFont;
-        IconBox.HorizontalAlignment = align;
     }
 
     private BoxItem? Item => DataContext as BoxItem;

@@ -10,9 +10,12 @@
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
     </UserControl.Resources>
 
-    <!-- 统一容器:用 StackPanel(可改方向) 承载 图标区 + 名称区 + 详情区 -->
+    <!-- 统一 Grid 容器:行列定义由 ApplyLayout 按 TileSize 动态切换。
+         横向模式用列定义做表格对齐(图标 | 名称* | 修改时间 | 大小),名称用 * 列填满可用空间,
+         不再靠固定 MaxWidth 截断——有空间就显示全名,真正放不下才 TextTrimming 省略。
+         详细信息模式的修改时间/大小用固定列宽,保证每行对齐。 -->
     <Border x:Name="Root" Padding="3">
-        <StackPanel x:Name="Panel" Orientation="Vertical">
+        <Grid x:Name="LayoutGrid">
             <!-- 图标区 -->
             <Grid x:Name="IconBox" Width="44" Height="44" HorizontalAlignment="Center">
                 <Border x:Name="Fallback" CornerRadius="10">
@@ -24,20 +27,21 @@
                        Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
                        Source="{Binding IconCachePath}"/>
             </Grid>
-            <!-- 名称区 -->
+            <!-- 名称 -->
             <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
                        Foreground="#FFEEEEEE" FontSize="11"
                        TextAlignment="Center" TextTrimming="CharacterEllipsis"
-                       TextWrapping="NoWrap" Margin="0,3,0,0" MaxWidth="120"/>
-            <!-- 详情区(仅详细信息/平铺用) -->
-            <StackPanel x:Name="DetailBox" Orientation="Vertical" Visibility="Collapsed">
-                <TextBlock x:Name="ModifiedText" Text="{Binding ModifiedText}"
-                           Foreground="#FF999999" FontSize="9"
-                           TextTrimming="CharacterEllipsis"/>
-                <TextBlock x:Name="SizeText" Text="{Binding SizeText}"
-                           Foreground="#FF999999" FontSize="9"
-                           TextTrimming="CharacterEllipsis"/>
-            </StackPanel>
-        </StackPanel>
+                       TextWrapping="NoWrap" Margin="0,3,0,0"/>
+            <!-- 修改时间(详细信息/平铺可见) -->
+            <TextBlock x:Name="ModifiedText" Text="{Binding ModifiedText}"
+                       Foreground="#FF999999" FontSize="9"
+                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                       Visibility="Collapsed"/>
+            <!-- 大小(详细信息/平铺可见) -->
+            <TextBlock x:Name="SizeText" Text="{Binding SizeText}"
+                       Foreground="#FF999999" FontSize="9"
+                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                       Visibility="Collapsed"/>
+        </Grid>
     </Border>
 </UserControl>
