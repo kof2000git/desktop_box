@@ -42,7 +42,7 @@
                     </Grid.ColumnDefinitions>
                     <Rectangle Grid.Column="0" Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="#4FC3F7" Margin="0,0,8,0"/>
                     <TextBlock Grid.Column="1"
-                               Text="{Binding Name}"
+                               Text="{Binding Header}"
                                FontWeight="SemiBold"
                                FontSize="13"
                                Foreground="White"
@@ -52,7 +52,7 @@
                     <Button Grid.Column="2"
                             x:Name="ToggleIconsBtn"
                             Click="OnToggleDesktopIcons"
-                            ToolTip="显示/隐藏桌面图标"
+                            ToolTip="{DynamicResource tip.toggleIcons}"
                             Width="24" Height="24" Margin="6,0,0,0" Padding="0"
                             Background="Transparent"
                             BorderBrush="#66FFFFFF"
@@ -122,14 +122,14 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding Name}"/>
+                            <TextBlock Text="{Binding Header}"/>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <Button Grid.Column="1" Content="+"
                         Width="24" Height="22" Margin="2,3,8,3"
                         FontSize="16" Padding="0"
-                        Click="OnAddTab" ToolTip="新建标签"/>
+                        Click="OnAddTab" ToolTip="{DynamicResource tip.newTab}"/>
             </Grid>
 
             <!-- 条目列表(当前标签 / Items):按 ViewMode 切换布局 -->
@@ -233,27 +233,28 @@
     </Border>
 
     <UserControl.ContextMenu>
-        <!-- ContextMenu 不在视觉树中,需显式绑定到 PlacementTarget(本控件)的 DataContext -->
+        <!-- ContextMenu 不在视觉树中,需显式绑定到 PlacementTarget(本控件)的 DataContext。
+             Header 用 DynamicResource,语言切换时自动刷新。 -->
         <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-            <MenuItem Header="查看">
-                <MenuItem Header="大图标" Click="OnViewLarge" IsCheckable="True"
+            <MenuItem Header="{DynamicResource menu.view}">
+                <MenuItem Header="{DynamicResource view.large}" Click="OnViewLarge" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Large}, Mode=OneWay}"/>
-                <MenuItem Header="中等图标" Click="OnViewMedium" IsCheckable="True"
+                <MenuItem Header="{DynamicResource view.medium}" Click="OnViewMedium" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Medium}, Mode=OneWay}"/>
-                <MenuItem Header="小图标" Click="OnViewSmall" IsCheckable="True"
+                <MenuItem Header="{DynamicResource view.small}" Click="OnViewSmall" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Small}, Mode=OneWay}"/>
-                <MenuItem Header="列表" Click="OnViewList" IsCheckable="True"
+                <MenuItem Header="{DynamicResource view.list}" Click="OnViewList" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.List}, Mode=OneWay}"/>
-                <MenuItem Header="详细信息" Click="OnViewDetail" IsCheckable="True"
+                <MenuItem Header="{DynamicResource view.detail}" Click="OnViewDetail" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Detail}, Mode=OneWay}"/>
-                <MenuItem Header="平铺" Click="OnViewTile" IsCheckable="True"
+                <MenuItem Header="{DynamicResource view.tile}" Click="OnViewTile" IsCheckable="True"
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Tile}, Mode=OneWay}"/>
             </MenuItem>
-            <MenuItem Header="重命名盒子" Click="OnRename"/>
-            <MenuItem Header="清空盒子" Click="OnClear"/>
+            <MenuItem Header="{DynamicResource box.menu.rename}" Click="OnRename"/>
+            <MenuItem Header="{DynamicResource box.menu.clear}" Click="OnClear"/>
             <Separator/>
             <!-- 仅标签模式 -->
-            <MenuItem Header="新建标签" Click="OnAddTab">
+            <MenuItem Header="{DynamicResource box.menu.newTab}" Click="OnAddTab">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -265,7 +266,7 @@
                     </Style>
                 </MenuItem.Style>
             </MenuItem>
-            <MenuItem Header="重命名当前标签" Click="OnRenameTab">
+            <MenuItem Header="{DynamicResource box.menu.renameTab}" Click="OnRenameTab">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -277,7 +278,7 @@
                     </Style>
                 </MenuItem.Style>
             </MenuItem>
-            <MenuItem Header="删除当前标签" Click="OnDeleteTab">
+            <MenuItem Header="{DynamicResource box.menu.deleteTab}" Click="OnDeleteTab">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -290,7 +291,7 @@
                 </MenuItem.Style>
             </MenuItem>
             <!-- 仅普通模式 -->
-            <MenuItem Header="转为标签盒子" Click="OnConvertToTabbed">
+            <MenuItem Header="{DynamicResource box.menu.toTabbed}" Click="OnConvertToTabbed">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Visible"/>
@@ -303,7 +304,7 @@
                 </MenuItem.Style>
             </MenuItem>
             <!-- 仅标签模式 -->
-            <MenuItem Header="合并其它盒子进来…" Click="OnMergeIn">
+            <MenuItem Header="{DynamicResource box.menu.mergeIn}" Click="OnMergeIn">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -315,7 +316,7 @@
                     </Style>
                 </MenuItem.Style>
             </MenuItem>
-            <MenuItem Header="拆分为独立盒子" Click="OnSplit">
+            <MenuItem Header="{DynamicResource box.menu.split}" Click="OnSplit">
                 <MenuItem.Style>
                     <Style TargetType="MenuItem">
                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -328,7 +329,7 @@
                 </MenuItem.Style>
             </MenuItem>
             <Separator/>
-            <MenuItem Header="删除盒子" Click="OnDelete"/>
+            <MenuItem Header="{DynamicResource box.menu.delete}" Click="OnDelete"/>
         </ContextMenu>
     </UserControl.ContextMenu>
 </UserControl>

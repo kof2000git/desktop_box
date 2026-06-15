@@ -13,16 +13,19 @@ public class MainViewModelTests
     private readonly Mock<IIconExtractorService> _icon = new();
     private readonly Mock<IOrganizeService> _organize = new();
     private readonly Mock<IDesktopIconsService> _desktopIcons = new();
+    private readonly Mock<ILocalizerService> _localizer = new();
 
     private MainViewModel NewVm()
     {
         _store.Reset();
+        // Localizer 索引器回退:返回 key 本身(模拟"无翻译"行为)
+        _localizer.Setup(l => l[It.IsAny<string>()]).Returns<string>(k => k);
         _store.Setup(s => s.Load()).Returns(new AppConfig());
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns((string?)null);
         _organize.SetupGet(o => o.HasActiveOrganize).Returns(false);
         _organize.Setup(o => o.CountOrganizable()).Returns(0);
         _desktopIcons.SetupGet(d => d.AreIconsVisible).Returns(true);
-        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
+        return new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object, _localizer.Object);
     }
 
     [Fact]
@@ -50,7 +53,7 @@ public class MainViewModelTests
         {
             Boxes = new() { new Box { Name = "已存在" } }
         });
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object, _localizer.Object);
         vm.LoadCommand.Execute(null);
         vm.Boxes.Should().ContainSingle(b => b.Name == "已存在");
     }
@@ -63,7 +66,7 @@ public class MainViewModelTests
             Boxes = new() { new Box { Name = "B" } }
         });
         _icon.Setup(i => i.Extract(It.IsAny<string>())).Returns("/icons/x.png");
-        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object);
+        var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _desktopIcons.Object, _localizer.Object);
         vm.LoadCommand.Execute(null);
 
         var exe = System.IO.Path.ChangeExtension(System.IO.Path.GetTempFileName(), ".exe");

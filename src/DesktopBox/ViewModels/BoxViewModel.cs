@@ -3,6 +3,8 @@ using System.Collections.Specialized;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DesktopBox.Models;
+using DesktopBox.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DesktopBox.ViewModels;
 
@@ -11,6 +13,8 @@ public partial class BoxViewModel : ObservableObject
     public Guid Id { get; }
 
     [ObservableProperty] private string _name;
+    /// <summary>程序生成盒子的稳定标识(box.organize / box.sysicons);用户手建为 null。逻辑匹配用 Key。</summary>
+    public string? Key { get; }
     [ObservableProperty] private double _x;
     [ObservableProperty] private double _y;
     [ObservableProperty] private double _width;
@@ -28,6 +32,23 @@ public partial class BoxViewModel : ObservableObject
     /// <summary>当前盒子在 UI 上应渲染的条目集合:普通模式=Items,标签模式=选中标签的 Items。</summary>
     public ObservableCollection<BoxItem> DisplayItems =>
         IsTabbed && SelectedTab is not null ? SelectedTab.Items : Items;
+
+    /// <summary>显示名:有 Key 时取当前语言翻译,否则用 Name。语言切换时由 MainViewModel 触发刷新。</summary>
+    public string Header
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(Key))
+            {
+                var loc = App.Services.GetRequiredService<ILocalizerService>();
+                return loc[Key];
+            }
+            return Name;
+        }
+    }
+
+    /// <summary>语言切换后重算 Header(触发 PropertyChanged)。</summary>
+    public void RefreshHeader() => OnPropertyChanged(nameof(Header));
 
     // ---- 视图模式:统一用全局(MainViewModel.GlobalViewMode),所有盒子/标签一致 ----
     // ViewMode 字段保留为"当前视图"的只读镜像,IsLarge 等基于它;由 MainViewModel 广播刷新。
@@ -82,6 +103,7 @@ public partial class BoxViewModel : ObservableObject
     {
         Id = model.Id;
         _name = model.Name;
+        Key = model.Key;
         _x = model.X; _y = model.Y;
         _width = model.Width; _height = model.Height;
         _accentColor = model.AccentColor;
@@ -112,10 +134,12 @@ public partial class BoxViewModel : ObservableObject
         foreach (var t in Tabs) t.Items.Clear();
     }
 
-    /// <summary>新建一个空标签并选中它。</summary>
+    /// <summary>新建一个空标签并选中它。name 为空时用当前语言的默认标签名。</summary>
     public BoxTab AddTab(string name)
     {
-        var tab = new BoxTab { Name = string.IsNullOrWhiteSpace(name) ? $"标签 {Tabs.Count + 1}" : name };
+        if (string.IsNullOrWhiteSpace(name))
+            name = $"{App.Services.GetRequiredService<ILocalizerService>()["tab.default"]} {Tabs.Count + 1}";
+        var tab = new BoxTab { Name = name };
         Tabs.Add(tab);
         SelectedTab = tab;
         return tab;
@@ -125,6 +149,7 @@ public partial class BoxViewModel : ObservableObject
     {
         Id = Id,
         Name = Name,
+        Key = Key,
         X = X, Y = Y,
         Width = Width, Height = Height,
         AccentColor = AccentColor,

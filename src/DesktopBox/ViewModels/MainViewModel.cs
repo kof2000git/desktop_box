@@ -21,6 +21,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IIconExtractorService _icon;
     private readonly IOrganizeService _organize;
     private readonly IDesktopIconsService _desktopIcons;
+    private readonly ILocalizerService _localizer;
     private Timer? _debounce;
 
     public ObservableCollection<BoxViewModel> Boxes { get; } = new();
@@ -57,17 +58,22 @@ public partial class MainViewModel : ObservableObject
 
     // 分类在标签盒子中的排列顺序
     private static readonly string[] CategoryOrderArr =
-        { "应用程序", "文档", "图片", "视频", "音频", "快捷方式", "压缩包", "文件夹", "其他" };
+        { CategorizerService.Program, CategorizerService.Document, CategorizerService.Image,
+          CategorizerService.Video, CategorizerService.Audio, CategorizerService.Shortcut,
+          CategorizerService.Archive, CategorizerService.FolderCat, CategorizerService.Other };
 
     public MainViewModel(IPersistenceService store, IDropParserService parser,
                          IIconExtractorService icon, IOrganizeService organize,
-                         IDesktopIconsService desktopIcons)
+                         IDesktopIconsService desktopIcons, ILocalizerService localizer)
     {
         _store = store;
         _parser = parser;
         _icon = icon;
         _organize = organize;
         _desktopIcons = desktopIcons;
+        _localizer = localizer;
+        // 语言切换后刷新所有程序生成盒子/标签的显示名(Header)
+        _localizer.LanguageChanged += (_, _) => RefreshAllHeaders();
     }
 
     [RelayCommand]
@@ -92,6 +98,26 @@ public partial class MainViewModel : ObservableObject
                 {
                     it.TargetPath = clsid;
                     it.IconCachePath = null;   // 清旧图标缓存路径,强制用新 CLSID 重新提取
+                }
+            }
+        }
+
+        // i18n 迁移:旧版程序生成的盒子/标签用中文 Name 当逻辑键。补上 Key,使其按当前语言显示,
+        // 且逻辑匹配(找整理盒子/系统图标/分类标签)改用稳定的 Key。仅识别已知的旧中文名。
+        foreach (var b in cfg.Boxes)
+        {
+            if (string.IsNullOrEmpty(b.Key))
+            {
+                if (b.Name == "桌面整理") b.Key = "box.organize";
+                else if (b.Name == "系统图标") b.Key = "box.sysicons";
+            }
+            foreach (var t in b.Tabs)
+            {
+                if (string.IsNullOrEmpty(t.Key))
+                {
+                    if (t.Name == "系统图标") t.Key = "tab.sysicons";
+                    else if (CategorizerService.LegacyZhToKey.TryGetValue(t.Name, out var catKey))
+                        t.Key = catKey;
                 }
             }
         }
@@ -165,11 +191,11 @@ public partial class MainViewModel : ObservableObject
         // 回退查找可防止 manifest 丢失/损坏时重复建盒子。
         Guid? knownId = _organize.GetOrganizeBoxId();
         var box = knownId.HasValue ? Boxes.FirstOrDefault(b => b.Id == knownId.Value) : null;
-        box ??= Boxes.FirstOrDefault(b => b.Name == "桌面整理" && b.IsTabbed);
+        box ??= Boxes.FirstOrDefault(b => b.Key == "box.organize");
         bool firstTime = box is null;
 
         if (box is null)
-            AddBoxSynced(box = new BoxViewModel(new Box { Name = "桌面整理", Width = 300, Height = 380, X = 40, Y = 40 }));
+            AddBoxSynced(box = new BoxViewModel(new Box { Key = "box.organize", Name = _localizer["box.organize"], Width = 300, Height = 380, X = 40, Y = 40 }));
         _organize.RecordBoxIds(new[] { box.Id });   // 始终刷新,确保 manifest 指向当前整理盒子
 
         // 增量:扫描 → 排除已在整理盒子里的 → 分类并入对应标签
@@ -182,7 +208,7 @@ public partial class MainViewModel : ObservableObject
         var allItems = new List<BoxItem>();
         foreach (var g in newEntries.GroupBy(e => e.Category).OrderBy(g => CategoryOrder(g.Key)))
         {
-            var tab = box.Tabs.FirstOrDefault(t => t.Name == g.Key) ?? NewTab(box, g.Key);
+            var tab = box.Tabs.FirstOrDefault(t => t.Key == g.Key) ?? NewTab(box, g.Key);
             foreach (var it in g.OrderBy(e => System.IO.Path.GetFileName(e.Path)))
             {
                 var item = _parser.ParsePath(it.Path);
@@ -210,21 +236,26 @@ public partial class MainViewModel : ObservableObject
             hidIcons = true;
         }
 
-        var msg = newEntries.Count == 0
-            ? (firstTime
-                ? "桌面上没有需要整理的文件,仅创建了「桌面整理」盒子并添加系统图标。"
-                : (sysAdded ? "已补上系统图标,没有新的桌面文件需要整理。" : "没有新的桌面文件需要整理,已全部归类。"))
-            : $"已整理 {newEntries.Count} 个新文件到「桌面整理」盒子{(sysAdded ? "(并添加系统图标)" : "")}。\n(文件未移动,图标稍候加载。)";
-        if (hidIcons)
-            msg += "\n\n为避免桌面图标与盒子里的重复显示,已自动隐藏桌面图标。\n" +
-                   "如需重新显示桌面图标:点托盘菜单的「隐藏/显示桌面图标」,或盒子标题栏右侧的眼睛图标。";
+        string msg;
+        if (newEntries.Count == 0)
+        {
+            msg = firstTime ? _localizer["dialog.organize.empty.first"]
+                : (sysAdded ? _localizer["dialog.organize.empty.sysAdded"] : _localizer["dialog.organize.empty.done"]);
+        }
+        else
+        {
+            msg = string.Format(_localizer["dialog.organize.done"],
+                newEntries.Count,
+                sysAdded ? _localizer["dialog.organize.sysIconsTag"] : "");
+        }
+        if (hidIcons) msg += _localizer["dialog.organize.hidIcons"];
         InputDialog.Inform(msg);
     }
 
-    /// <summary>新建标签并加入盒子,返回该标签。</summary>
-    private static BoxTab NewTab(BoxViewModel box, string name)
+    /// <summary>新建分类标签并加入盒子。catKey 是分类稳定 key(cat.xxx);Name 用当前语言翻译作可读备份。</summary>
+    private BoxTab NewTab(BoxViewModel box, string catKey)
     {
-        var tab = new BoxTab { Name = name };
+        var tab = new BoxTab { Key = catKey, Name = _localizer[catKey] };
         box.Tabs.Add(tab);
         return tab;
     }
@@ -232,8 +263,8 @@ public partial class MainViewModel : ObservableObject
     /// <summary>确保整理盒子有「系统图标」标签(此电脑/回收站/控制面板/网络)。已有则不动。</summary>
     private bool EnsureSystemIconsTab(BoxViewModel box, List<BoxItem> extracted)
     {
-        if (box.Tabs.Any(t => t.Name == "系统图标")) return false;
-        var tab = new BoxTab { Name = "系统图标" };
+        if (box.Tabs.Any(t => t.Key == "tab.sysicons")) return false;
+        var tab = new BoxTab { Key = "tab.sysicons", Name = _localizer["tab.sysicons"] };
         foreach (var def in SystemIcons.Definitions)
         {
             var item = new BoxItem
@@ -269,13 +300,13 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void AddSystemIconsBox()
     {
-        if (Boxes.Any(b => b.Name == "系统图标"))
+        if (Boxes.Any(b => b.Key == "box.sysicons"))
         {
-            InputDialog.Inform("已经存在「系统图标」盒子了。");
+            InputDialog.Inform(_localizer["dialog.sysIcons.exists"]);
             return;
         }
 
-        var box = new BoxViewModel(new Box { Name = "系统图标", Width = 240, Height = 200 });
+        var box = new BoxViewModel(new Box { Key = "box.sysicons", Name = _localizer["box.sysicons"], Width = 240, Height = 200 });
         var items = new List<BoxItem>();
         foreach (var def in SystemIcons.Definitions)
         {
@@ -355,7 +386,7 @@ public partial class MainViewModel : ObservableObject
     private void SplitBox(BoxViewModel? box)
     {
         if (box is null || !box.IsTabbed) return;
-        if (!InputDialog.Confirm($"将盒子「{box.Name}」拆分为 {box.Tabs.Count} 个独立盒子?\n(每个标签变成一个单独盒子,位置略有错开,可拖开)"))
+        if (!InputDialog.Confirm(string.Format(_localizer["dialog.split.confirm"], box.Header, box.Tabs.Count)))
             return;
 
         int index = Boxes.IndexOf(box);
@@ -502,5 +533,15 @@ public partial class MainViewModel : ObservableObject
             _store.Save(cfg);
         }
         catch { /* 落盘失败不应影响使用,也不弹吓人错误框 */ }
+    }
+
+    /// <summary>语言切换后:刷新所有盒子与标签的 Header(显示名),让程序生成的项按新语言显示。</summary>
+    private void RefreshAllHeaders()
+    {
+        foreach (var b in Boxes)
+        {
+            b.RefreshHeader();
+            foreach (var t in b.Tabs) t.RefreshHeader();
+        }
     }
 }

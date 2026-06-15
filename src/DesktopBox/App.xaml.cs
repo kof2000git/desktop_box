@@ -33,8 +33,9 @@ public partial class App : Application
             LogError(args.Exception, "DispatcherUnhandledException");
             try
             {
-                MessageBox.Show($"发生了一个错误,但程序将继续运行:\n\n{args.Exception.Message}",
-                    "DesktopBox", MessageBoxButton.OK, MessageBoxImage.Warning);
+                var loc = App.Services.GetRequiredService<ILocalizerService>();
+                MessageBox.Show(string.Format(loc["dialog.unhandledError"], args.Exception.Message),
+                    loc["app.errorTitle"], MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             catch { }
             args.Handled = true;
@@ -62,6 +63,9 @@ public partial class App : Application
         var theme = Services.GetRequiredService<IThemeService>();
         if (cfg.Settings.FollowSystemTheme) theme.ApplySystem();
         else theme.Apply(cfg.Settings.Theme);
+
+        // 界面语言:检测系统语言或用手动设置(默认 auto=跟随系统)
+        Services.GetRequiredService<ILocalizerService>().Apply(cfg.Settings.Language);
 
         // 主窗口
         var main = Services.GetRequiredService<MainWindow>();
@@ -142,6 +146,7 @@ public partial class App : Application
         s.AddSingleton<ICategorizerService, CategorizerService>();
         s.AddSingleton<IDesktopScannerService, DesktopScannerService>();
         s.AddSingleton<IOrganizeService, OrganizeService>();
+        s.AddSingleton<ILocalizerService, LocalizerService>();
         s.AddSingleton<IDesktopIconsService, DesktopIconsService>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();

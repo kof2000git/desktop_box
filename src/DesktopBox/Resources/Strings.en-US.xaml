@@ -1,0 +1,108 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:s="clr-namespace:System;assembly=System.Runtime">
+    <!-- i18n resources (English). Keys mirror Strings.zh-CN.xaml 1:1. -->
+
+    <s:String x:Key="app.name">DesktopBox</s:String>
+    <s:String x:Key="app.trayText">Desktop Organizer</s:String>
+    <s:String x:Key="app.errorTitle">DesktopBox</s:String>
+
+    <s:String x:Key="common.ok">OK</s:String>
+    <s:String x:Key="common.cancel">Cancel</s:String>
+
+    <s:String x:Key="menu.showBoxes">Show Boxes</s:String>
+    <s:String x:Key="menu.newBox">New Box</s:String>
+    <s:String x:Key="menu.addSysIcons">Add System Icons Box</s:String>
+    <s:String x:Key="menu.organize">Tidy Desktop</s:String>
+    <s:String x:Key="menu.toggleIcons">Hide/Show Desktop Icons</s:String>
+    <s:String x:Key="menu.settings">Settings</s:String>
+    <s:String x:Key="menu.quit">Quit</s:String>
+    <s:String x:Key="menu.view">View</s:String>
+
+    <s:String x:Key="view.large">Large Icons</s:String>
+    <s:String x:Key="view.medium">Medium Icons</s:String>
+    <s:String x:Key="view.small">Small Icons</s:String>
+    <s:String x:Key="view.list">List</s:String>
+    <s:String x:Key="view.detail">Details</s:String>
+    <s:String x:Key="view.tile">Tiles</s:String>
+
+    <s:String x:Key="box.menu.rename">Rename Box</s:String>
+    <s:String x:Key="box.menu.clear">Clear Box</s:String>
+    <s:String x:Key="box.menu.newTab">New Tab</s:String>
+    <s:String x:Key="box.menu.renameTab">Rename Tab</s:String>
+    <s:String x:Key="box.menu.deleteTab">Delete Tab</s:String>
+    <s:String x:Key="box.menu.toTabbed">Convert to Tabbed Box</s:String>
+    <s:String x:Key="box.menu.mergeIn">Merge Another Box…</s:String>
+    <s:String x:Key="box.menu.split">Split into Boxes</s:String>
+    <s:String x:Key="box.menu.delete">Delete Box</s:String>
+
+    <s:String x:Key="tip.toggleIcons">Show/Hide Desktop Icons</s:String>
+    <s:String x:Key="tip.newTab">New Tab</s:String>
+
+    <s:String x:Key="settings.title">DesktopBox Settings</s:String>
+    <s:String x:Key="settings.general">General</s:String>
+    <s:String x:Key="settings.autoStart">Start with Windows</s:String>
+    <s:String x:Key="settings.followTheme">Follow System Theme</s:String>
+    <s:String x:Key="settings.theme">Theme:</s:String>
+    <s:String x:Key="settings.language">Language:</s:String>
+    <s:String x:Key="lang.auto">Auto (follow system)</s:String>
+    <s:String x:Key="lang.zh-CN">简体中文</s:String>
+    <s:String x:Key="lang.en-US">English</s:String>
+    <s:String x:Key="settings.note">Changes apply instantly and save automatically.</s:String>
+
+    <s:String x:Key="theme.dark">Dark</s:String>
+    <s:String x:Key="theme.light">Light</s:String>
+
+    <s:String x:Key="item.open">Open</s:String>
+    <s:String x:Key="item.showInExplorer">Show in Explorer</s:String>
+    <s:String x:Key="item.copyPath">Copy Path</s:String>
+    <s:String x:Key="item.remove">Remove from Box</s:String>
+
+    <s:String x:Key="verb.open">Open</s:String>
+    <s:String x:Key="verb.edit">Edit</s:String>
+    <s:String x:Key="verb.print">Print</s:String>
+    <s:String x:Key="verb.printto">Print To</s:String>
+    <s:String x:Key="verb.preview">Preview</s:String>
+    <s:String x:Key="verb.runas">Run as Administrator</s:String>
+    <s:String x:Key="verb.runasuser">Run as Different User</s:String>
+    <s:String x:Key="verb.explore">Browse in Explorer</s:String>
+    <s:String x:Key="verb.find">Find</s:String>
+
+    <s:String x:Key="dialog.renameBox.title">Rename Box</s:String>
+    <s:String x:Key="dialog.renameBox.prompt">Enter the new box name:</s:String>
+    <s:String x:Key="dialog.clearBox.confirm">Clear all items in this box?&#x0a;(Only removes them from the box; files are not deleted.)</s:String>
+    <s:String x:Key="dialog.deleteBox.nonEmpty">Box "{0}" still has {1} item(s). To prevent files appearing lost, non-empty boxes can't be deleted directly.&#x0a;&#x0a;To delete anyway:&#x0a;• Click "Clear Box" first (files stay in place, nothing is deleted), then delete&#x0a;• Or remove items one by one&#x0a;&#x0a;For the tabbed box created by Tidy Desktop, use the tidy box's options to restore.</s:String>
+    <s:String x:Key="dialog.deleteBox.empty">Delete empty box "{0}"?</s:String>
+    <s:String x:Key="dialog.deleteTab.nonEmpty">Tab "{0}" still has {1} item(s) and can't be deleted.&#x0a;Clear it first (move items to other tabs or remove them one by one).</s:String>
+    <s:String x:Key="dialog.deleteTab.last">This is the last tab and can't be deleted.&#x0a;(To remove the whole box, use "Delete Box".)</s:String>
+    <s:String x:Key="dialog.merge.none">No other boxes to merge.</s:String>
+    <s:String x:Key="dialog.merge.title">Merge Box</s:String>
+    <s:String x:Key="dialog.merge.prompt">Select a box to merge in (added as a new tab):</s:String>
+    <s:String x:Key="dialog.openFail">Cannot open: {0}</s:String>
+    <s:String x:Key="dialog.targetGone">The target of "{0}" no longer exists (deleted or moved) and has been removed from the box.&#x0a;(Only the box reference is removed; the file itself is untouched.)</s:String>
+    <s:String x:Key="dialog.unhandledError">An error occurred, but the program will keep running:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.sysIcons.exists">A "System Icons" box already exists.</s:String>
+    <s:String x:Key="dialog.split.confirm">Split box "{0}" into {1} separate boxes?&#x0a;(Each tab becomes its own box, slightly offset so you can drag them apart.)</s:String>
+
+    <s:String x:Key="dialog.organize.empty.first">No files needed tidying. Created the "Desktop Tidy" box and added system icons.</s:String>
+    <s:String x:Key="dialog.organize.empty.sysAdded">Added system icons; no new desktop files to tidy.</s:String>
+    <s:String x:Key="dialog.organize.empty.done">No new desktop files to tidy; everything is already sorted.</s:String>
+    <s:String x:Key="dialog.organize.done">Tidied {0} new file(s) into the "Desktop Tidy" box{1}.&#x0a;(Files were not moved; icons load shortly.)</s:String>
+    <s:String x:Key="dialog.organize.sysIconsTag"> (and added system icons)</s:String>
+    <s:String x:Key="dialog.organize.hidIcons">&#x0a;&#x0a;To avoid duplicate icons, desktop icons were hidden automatically.&#x0a;To show them again: tray menu "Hide/Show Desktop Icons", or the eye icon on the box title bar.</s:String>
+
+    <s:String x:Key="cat.apps">Applications</s:String>
+    <s:String x:Key="cat.docs">Documents</s:String>
+    <s:String x:Key="cat.images">Images</s:String>
+    <s:String x:Key="cat.video">Videos</s:String>
+    <s:String x:Key="cat.audio">Audio</s:String>
+    <s:String x:Key="cat.shortcut">Shortcuts</s:String>
+    <s:String x:Key="cat.archive">Archives</s:String>
+    <s:String x:Key="cat.folder">Folders</s:String>
+    <s:String x:Key="cat.other">Other</s:String>
+
+    <s:String x:Key="box.organize">Desktop Tidy</s:String>
+    <s:String x:Key="box.sysicons">System Icons</s:String>
+    <s:String x:Key="tab.sysicons">System Icons</s:String>
+    <s:String x:Key="tab.default">Tab</s:String>
+</ResourceDictionary>

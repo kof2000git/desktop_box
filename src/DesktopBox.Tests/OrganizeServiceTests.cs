@@ -53,10 +53,10 @@ public class OrganizeServiceTests
 
             // 路径为原始路径(引用),分类正确
             entries.Should().OnlyContain(e => e.Path.StartsWith(_desktop!));
-            entries.Single(e => e.Path == files[0]).Category.Should().Be("文档");
-            entries.Single(e => e.Path == files[1]).Category.Should().Be("图片");
-            entries.Single(e => e.Path == files[2]).Category.Should().Be("应用程序");
-            entries.Single(e => e.Path == files[3]).Category.Should().Be("文件夹");
+            entries.Single(e => e.Path == files[0]).Category.Should().Be(CategorizerService.Document);
+            entries.Single(e => e.Path == files[1]).Category.Should().Be(CategorizerService.Image);
+            entries.Single(e => e.Path == files[2]).Category.Should().Be(CategorizerService.Program);
+            entries.Single(e => e.Path == files[3]).Category.Should().Be(CategorizerService.FolderCat);
         }
         finally { Cleanup(); }
     }

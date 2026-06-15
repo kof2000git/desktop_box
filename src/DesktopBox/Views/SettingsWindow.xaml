@@ -1,8 +1,8 @@
 <Window x:Class="DesktopBox.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="DesktopBox 设置"
-        Width="400" Height="320"
+        Title="{DynamicResource settings.title}"
+        Width="400" Height="360"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanMinimize"
         Background="#FF1F1F1F"
@@ -14,28 +14,41 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="通用" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+        <TextBlock Grid.Row="0" Text="{DynamicResource settings.general}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
-        <CheckBox Grid.Row="1" Content="开机自启动"
+        <CheckBox Grid.Row="1" Content="{DynamicResource settings.autoStart}"
                   IsChecked="{Binding AutoStart}"
                   Margin="0,0,0,10" Foreground="White"/>
 
-        <CheckBox Grid.Row="2" Content="跟随系统深浅色"
+        <CheckBox Grid.Row="2" Content="{DynamicResource settings.followTheme}"
                   IsChecked="{Binding FollowSystemTheme}"
                   Margin="0,0,0,16" Foreground="White"/>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal">
-            <TextBlock Text="主题:" VerticalAlignment="Center" Foreground="White" Margin="0,0,12,0"/>
-            <RadioButton x:Name="DarkRadio" GroupName="Theme" Content="深色"
+            <TextBlock Text="{DynamicResource settings.theme}" VerticalAlignment="Center" Foreground="White" Margin="0,0,12,0"/>
+            <RadioButton x:Name="DarkRadio" GroupName="Theme" Content="{DynamicResource theme.dark}"
                          IsChecked="{Binding IsDark}" Foreground="White" Margin="0,0,16,0"/>
-            <RadioButton x:Name="LightRadio" GroupName="Theme" Content="浅色" Foreground="White"/>
+            <RadioButton x:Name="LightRadio" GroupName="Theme" Content="{DynamicResource theme.light}" Foreground="White"/>
         </StackPanel>
 
-        <TextBlock Grid.Row="5" Text="设置即时生效并自动保存。"
+        <!-- 语言:auto / 简体中文 / English -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,16,0,0">
+            <TextBlock Text="{DynamicResource settings.language}" VerticalAlignment="Center" Foreground="White" Margin="0,0,12,0"/>
+            <ComboBox x:Name="LangCombo" SelectedIndex="{Binding LangIndex}"
+                      MinWidth="170" Padding="6,4"
+                      Background="#FF2B2B2B" Foreground="White" BorderBrush="#FF555555">
+                <ComboBoxItem Content="{DynamicResource lang.auto}"/>
+                <ComboBoxItem Content="{DynamicResource lang.zh-CN}"/>
+                <ComboBoxItem Content="{DynamicResource lang.en-US}"/>
+            </ComboBox>
+        </StackPanel>
+
+        <TextBlock Grid.Row="6" Text="{DynamicResource settings.note}"
                    Foreground="#FF9AA0A6" FontSize="11"/>
     </Grid>
 </Window>

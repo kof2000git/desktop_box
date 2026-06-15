@@ -1,0 +1,120 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:s="clr-namespace:System;assembly=System.Runtime">
+    <!-- i18n 资源(简体中文)。{DynamicResource} 绑定 / ILocalizerService[key] 取文本。
+         带占位符 {0}/{1} 的字符串由 CS 用 string.Format 填充。换行用 &#x0a;。 -->
+
+    <!-- 应用 -->
+    <s:String x:Key="app.name">DesktopBox</s:String>
+    <s:String x:Key="app.trayText">桌面整理盒子</s:String>
+    <s:String x:Key="app.errorTitle">DesktopBox</s:String>
+
+    <!-- 通用按钮 -->
+    <s:String x:Key="common.ok">确定</s:String>
+    <s:String x:Key="common.cancel">取消</s:String>
+
+    <!-- 菜单(托盘 + 桌面右键共用)-->
+    <s:String x:Key="menu.showBoxes">显示盒子</s:String>
+    <s:String x:Key="menu.newBox">新建盒子</s:String>
+    <s:String x:Key="menu.addSysIcons">添加系统图标盒子</s:String>
+    <s:String x:Key="menu.organize">一键整理桌面</s:String>
+    <s:String x:Key="menu.toggleIcons">隐藏/显示桌面图标</s:String>
+    <s:String x:Key="menu.settings">设置</s:String>
+    <s:String x:Key="menu.quit">退出</s:String>
+    <s:String x:Key="menu.view">查看</s:String>
+
+    <s:String x:Key="view.large">大图标</s:String>
+    <s:String x:Key="view.medium">中等图标</s:String>
+    <s:String x:Key="view.small">小图标</s:String>
+    <s:String x:Key="view.list">列表</s:String>
+    <s:String x:Key="view.detail">详细信息</s:String>
+    <s:String x:Key="view.tile">平铺</s:String>
+
+    <!-- 盒子右键菜单 -->
+    <s:String x:Key="box.menu.rename">重命名盒子</s:String>
+    <s:String x:Key="box.menu.clear">清空盒子</s:String>
+    <s:String x:Key="box.menu.newTab">新建标签</s:String>
+    <s:String x:Key="box.menu.renameTab">重命名当前标签</s:String>
+    <s:String x:Key="box.menu.deleteTab">删除当前标签</s:String>
+    <s:String x:Key="box.menu.toTabbed">转为标签盒子</s:String>
+    <s:String x:Key="box.menu.mergeIn">合并其它盒子进来…</s:String>
+    <s:String x:Key="box.menu.split">拆分为独立盒子</s:String>
+    <s:String x:Key="box.menu.delete">删除盒子</s:String>
+
+    <!-- tooltip -->
+    <s:String x:Key="tip.toggleIcons">显示/隐藏桌面图标</s:String>
+    <s:String x:Key="tip.newTab">新建标签</s:String>
+
+    <!-- 设置 -->
+    <s:String x:Key="settings.title">DesktopBox 设置</s:String>
+    <s:String x:Key="settings.general">通用</s:String>
+    <s:String x:Key="settings.autoStart">开机自启动</s:String>
+    <s:String x:Key="settings.followTheme">跟随系统深浅色</s:String>
+    <s:String x:Key="settings.theme">主题:</s:String>
+    <s:String x:Key="settings.language">语言:</s:String>
+    <s:String x:Key="lang.auto">自动(跟随系统)</s:String>
+    <s:String x:Key="lang.zh-CN">简体中文</s:String>
+    <s:String x:Key="lang.en-US">English</s:String>
+    <s:String x:Key="settings.note">设置即时生效并自动保存。</s:String>
+
+    <s:String x:Key="theme.dark">深色</s:String>
+    <s:String x:Key="theme.light">浅色</s:String>
+
+    <!-- ItemTile 动态右键菜单 -->
+    <s:String x:Key="item.open">打开</s:String>
+    <s:String x:Key="item.showInExplorer">在资源管理器中显示</s:String>
+    <s:String x:Key="item.copyPath">复制路径</s:String>
+    <s:String x:Key="item.remove">从盒子移除</s:String>
+
+    <!-- Shell 动词显示名(右键菜单的 open/edit/print/…)-->
+    <s:String x:Key="verb.open">打开</s:String>
+    <s:String x:Key="verb.edit">编辑</s:String>
+    <s:String x:Key="verb.print">打印</s:String>
+    <s:String x:Key="verb.printto">打印到</s:String>
+    <s:String x:Key="verb.preview">预览</s:String>
+    <s:String x:Key="verb.runas">以管理员身份运行</s:String>
+    <s:String x:Key="verb.runasuser">以其他用户身份运行</s:String>
+    <s:String x:Key="verb.explore">资源管理器中浏览</s:String>
+    <s:String x:Key="verb.find">查找</s:String>
+
+    <!-- 对话框消息({0}/{1} 由 string.Format 填充)-->
+    <s:String x:Key="dialog.renameBox.title">重命名盒子</s:String>
+    <s:String x:Key="dialog.renameBox.prompt">请输入新的盒子名称：</s:String>
+    <s:String x:Key="dialog.clearBox.confirm">确定清空此盒子的所有条目吗?&#x0a;(只是从盒子里移除显示,文件不会被删除)</s:String>
+    <s:String x:Key="dialog.deleteBox.nonEmpty">盒子「{0}」里还有 {1} 个项目,为防止误以为文件丢失,不允许直接删除非空盒子。&#x0a;&#x0a;如确实要删除:&#x0a;• 先点「清空盒子」移除里面的条目(文件仍在原处,不会被删),再删盒子&#x0a;• 或把不需要的图标逐个删除&#x0a;&#x0a;如果是一键整理生成的标签盒子、想恢复桌面,请用「还原整理」。</s:String>
+    <s:String x:Key="dialog.deleteBox.empty">确定删除空盒子「{0}」吗?</s:String>
+    <s:String x:Key="dialog.deleteTab.nonEmpty">标签「{0}」里还有 {1} 个项目,不能直接删除。&#x0a;请先清空该标签(把图标移到其它标签或逐个删除)。</s:String>
+    <s:String x:Key="dialog.deleteTab.last">这是最后一个标签,无法删除。&#x0a;(如需删除整个盒子,请用「删除盒子」)</s:String>
+    <s:String x:Key="dialog.merge.none">没有其它盒子可合并。</s:String>
+    <s:String x:Key="dialog.merge.title">合并盒子</s:String>
+    <s:String x:Key="dialog.merge.prompt">选择要合并进来的盒子(将作为新标签加入当前盒子):</s:String>
+    <s:String x:Key="dialog.openFail">无法打开:{0}</s:String>
+    <s:String x:Key="dialog.targetGone">「{0}」的目标已不存在(可能被删除或移动),已从盒子移除该条目。&#x0a;(仅取消盒内显示,文件本体不受影响。)</s:String>
+    <s:String x:Key="dialog.unhandledError">发生了一个错误,但程序将继续运行:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.sysIcons.exists">已经存在「系统图标」盒子了。</s:String>
+    <s:String x:Key="dialog.split.confirm">将盒子「{0}」拆分为 {1} 个独立盒子?&#x0a;(每个标签变成一个单独盒子,位置略有错开,可拖开)</s:String>
+
+    <!-- 一键整理消息 -->
+    <s:String x:Key="dialog.organize.empty.first">桌面上没有需要整理的文件,仅创建了「桌面整理」盒子并添加系统图标。</s:String>
+    <s:String x:Key="dialog.organize.empty.sysAdded">已补上系统图标,没有新的桌面文件需要整理。</s:String>
+    <s:String x:Key="dialog.organize.empty.done">没有新的桌面文件需要整理,已全部归类。</s:String>
+    <s:String x:Key="dialog.organize.done">已整理 {0} 个新文件到「桌面整理」盒子{1}。&#x0a;(文件未移动,图标稍候加载。)</s:String>
+    <s:String x:Key="dialog.organize.sysIconsTag">(并添加系统图标)</s:String>
+    <s:String x:Key="dialog.organize.hidIcons">&#x0a;&#x0a;为避免桌面图标与盒子里的重复显示,已自动隐藏桌面图标。&#x0a;如需重新显示桌面图标:点托盘菜单的「隐藏/显示桌面图标」,或盒子标题栏右侧的眼睛图标。</s:String>
+
+    <!-- 分类(一键整理生成的标签名)-->
+    <s:String x:Key="cat.apps">应用程序</s:String>
+    <s:String x:Key="cat.docs">文档</s:String>
+    <s:String x:Key="cat.images">图片</s:String>
+    <s:String x:Key="cat.video">视频</s:String>
+    <s:String x:Key="cat.audio">音频</s:String>
+    <s:String x:Key="cat.shortcut">快捷方式</s:String>
+    <s:String x:Key="cat.archive">压缩包</s:String>
+    <s:String x:Key="cat.folder">文件夹</s:String>
+    <s:String x:Key="cat.other">其他</s:String>
+
+    <s:String x:Key="box.organize">桌面整理</s:String>
+    <s:String x:Key="box.sysicons">系统图标</s:String>
+    <s:String x:Key="tab.sysicons">系统图标</s:String>
+    <s:String x:Key="tab.default">标签</s:String>
+</ResourceDictionary>

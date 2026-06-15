@@ -3,7 +3,9 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows;
 using System.Windows.Controls;
+using DesktopBox.Services;
 using DesktopBox.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Application = System.Windows.Application;
 using Forms = System.Windows.Forms;
 
@@ -13,6 +15,7 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
     private readonly SettingsWindow _settings;
+    private readonly ILocalizerService _localizer;
     private Forms.NotifyIcon? _tray;
 
     public MainWindow(MainViewModel vm, SettingsWindow settings)
@@ -20,6 +23,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _vm = vm;
         _settings = settings;
+        _localizer = App.Services.GetRequiredService<ILocalizerService>();
         DataContext = _vm;
         _vm.LoadCommand.Execute(null);
         _vm.RefreshDesktopIconsState();
@@ -31,6 +35,8 @@ public partial class MainWindow : Window
         _vm.ScreenWidth = Width;
 
         SetupTray();
+        // WinForms 托盘菜单不像 WPF DynamicResource 会自动刷新,语言切换后需手动重建菜单文本
+        _localizer.LanguageChanged += (_, _) => RebuildTrayMenu();
     }
 
     private void SetupTray()
@@ -38,20 +44,27 @@ public partial class MainWindow : Window
         _tray = new Forms.NotifyIcon
         {
             Icon = MakeIcon(),
-            Text = $"DesktopBox 桌面整理盒子 v{App.Version}",
             Visible = true
         };
-        var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("显示盒子", null, (_, _) => ShowBoxes());
-        menu.Items.Add("新建盒子", null, (_, _) => _vm.AddBoxCommand.Execute(null));
-        menu.Items.Add("添加系统图标盒子", null, (_, _) => _vm.AddSystemIconsBoxCommand.Execute(null));
-        menu.Items.Add("一键整理桌面", null, (_, _) => _vm.OrganizeCommand.Execute(null));
-        menu.Items.Add("隐藏/显示桌面图标", null, (_, _) => _vm.ToggleDesktopIconsCommand.Execute(null));
-        menu.Items.Add("设置", null, (_, _) => OnOpenSettings(null, null));
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => OnQuit(null, null));
-        _tray.ContextMenuStrip = menu;
+        RebuildTrayMenu();
         _tray.DoubleClick += (_, _) => ShowBoxes();
+    }
+
+    /// <summary>重建托盘菜单文本 + tooltip(启动时 + 语言切换时调用)。</summary>
+    private void RebuildTrayMenu()
+    {
+        if (_tray is null) return;
+        _tray.Text = $"DesktopBox {_localizer["app.trayText"]} v{App.Version}";
+        var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add(_localizer["menu.showBoxes"], null, (_, _) => ShowBoxes());
+        menu.Items.Add(_localizer["menu.newBox"], null, (_, _) => _vm.AddBoxCommand.Execute(null));
+        menu.Items.Add(_localizer["menu.addSysIcons"], null, (_, _) => _vm.AddSystemIconsBoxCommand.Execute(null));
+        menu.Items.Add(_localizer["menu.organize"], null, (_, _) => _vm.OrganizeCommand.Execute(null));
+        menu.Items.Add(_localizer["menu.toggleIcons"], null, (_, _) => _vm.ToggleDesktopIconsCommand.Execute(null));
+        menu.Items.Add(_localizer["menu.settings"], null, (_, _) => OnOpenSettings(null, null));
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(_localizer["menu.quit"], null, (_, _) => OnQuit(null, null));
+        _tray.ContextMenuStrip = menu;
     }
 
     private void ShowBoxes()

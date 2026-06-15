@@ -40,7 +40,6 @@ public partial class InputDialog : Window
         var d = new InputDialog { Title = $"DesktopBox v{App.Version}" };
         d.Message.Text = message;
         d.Input.Visibility = Visibility.Collapsed;
-        d.OkButton.Content = "确定";
         d.ShowDialog();
         return d.DialogResult == true;
     }
@@ -68,7 +67,6 @@ public partial class InputDialog : Window
         d.Picker.ItemsSource = options;
         if (options.Count > 0)
             d.Picker.SelectedIndex = defaultIndex < 0 || defaultIndex >= options.Count ? 0 : defaultIndex;
-        d.OkButton.Content = "确定";
         d.ShowDialog();
         return d.DialogResult == true ? d.Picker.SelectedIndex : -1;
     }

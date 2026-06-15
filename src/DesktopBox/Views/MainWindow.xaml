@@ -15,13 +15,13 @@
     <Canvas x:Name="Layer" Background="Transparent" ClipToBounds="False">
         <Canvas.ContextMenu>
             <ContextMenu>
-                <MenuItem Header="新建盒子" Click="OnNewBox"/>
-                <MenuItem Header="添加系统图标盒子" Click="OnAddSystemIcons"/>
-                <MenuItem Header="一键整理桌面" Click="OnOrganize" FontWeight="SemiBold"/>
-                <MenuItem Header="隐藏/显示桌面图标" Click="OnToggleIcons"/>
-                <MenuItem Header="设置" Click="OnOpenSettings"/>
+                <MenuItem Header="{DynamicResource menu.newBox}" Click="OnNewBox"/>
+                <MenuItem Header="{DynamicResource menu.addSysIcons}" Click="OnAddSystemIcons"/>
+                <MenuItem Header="{DynamicResource menu.organize}" Click="OnOrganize" FontWeight="SemiBold"/>
+                <MenuItem Header="{DynamicResource menu.toggleIcons}" Click="OnToggleIcons"/>
+                <MenuItem Header="{DynamicResource menu.settings}" Click="OnOpenSettings"/>
                 <Separator/>
-                <MenuItem Header="退出" Click="OnQuit"/>
+                <MenuItem Header="{DynamicResource menu.quit}" Click="OnQuit"/>
             </ContextMenu>
         </Canvas.ContextMenu>
         <ItemsControl ItemsSource="{Binding Boxes}">

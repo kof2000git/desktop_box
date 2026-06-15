@@ -5,15 +5,32 @@ namespace DesktopBox.Services;
 
 public class CategorizerService : ICategorizerService
 {
-    public const string Program = "应用程序";    // 原"程序",更明确
-    public const string Document = "文档";
-    public const string Image = "图片";
-    public const string Archive = "压缩包";
-    public const string Video = "视频";
-    public const string Audio = "音频";          // 原"音乐"
-    public const string Shortcut = "快捷方式";   // 新增独立类
-    public const string FolderCat = "文件夹";
-    public const string Other = "其他";
+    // 分类稳定 key(逻辑标识 + i18n 翻译 key,资源字典里对应 cat.xxx)。
+    // 旧版是中文字符串("应用程序"等),既是逻辑键又是显示名;现拆分为 key + 翻译。
+    public const string Program = "cat.apps";
+    public const string Document = "cat.docs";
+    public const string Image = "cat.images";
+    public const string Archive = "cat.archive";
+    public const string Video = "cat.video";
+    public const string Audio = "cat.audio";
+    public const string Shortcut = "cat.shortcut";
+    public const string FolderCat = "cat.folder";
+    public const string Other = "cat.other";
+
+    /// <summary>旧版中文名 → 新 key。仅用于迁移历史 boxes.json:
+    /// 把旧数据里的中文标签名(应用程序/文档/…)补上 Key,使其升级后能正确按当前语言显示。</summary>
+    public static readonly Dictionary<string, string> LegacyZhToKey = new()
+    {
+        ["应用程序"] = Program,
+        ["文档"] = Document,
+        ["图片"] = Image,
+        ["压缩包"] = Archive,
+        ["视频"] = Video,
+        ["音频"] = Audio,
+        ["快捷方式"] = Shortcut,
+        ["文件夹"] = FolderCat,
+        ["其他"] = Other,
+    };
 
     private static readonly HashSet<string> Docs = new()
     { ".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".rtf", ".md", ".wps", ".et", ".dps", ".odt", ".ods", ".odp" };
