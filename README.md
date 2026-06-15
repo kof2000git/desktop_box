@@ -277,7 +277,7 @@ Contributions are welcome! · 欢迎贡献!
 
 ## 📄 License · 许可
 
-[MIT](LICENSE) © DesktopBox
+[MIT](LICENSE) © kof2000git
 
 > DesktopBox is an independent project. It is not affiliated with, endorsed by, or derived from Stardock Fences.
 > DesktopBox 是独立项目,与 Stardock Fences 无任何关联。
