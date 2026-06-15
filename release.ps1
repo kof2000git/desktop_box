@@ -141,8 +141,15 @@ if ($existingTag) {
     Write-Host "    已创建并推送 tag $tagName" -ForegroundColor DarkGray
 }
 
+# notes 优先级:-Notes 参数 > release/v<version>-notes.md > 内置默认
 if (-not $Notes) {
-    $Notes = "DesktopBox $tagName 发布包.`n`n绿色版,解压即用(含主程序 + 原生右键菜单 DLL)。`n运行环境:Windows 10/11 (64-bit),无需安装 .NET。"
+    $notesFilePath = Join-Path $releaseDir "v$version-notes.md"
+    if (Test-Path $notesFilePath) {
+        $Notes = Get-Content -Raw -Encoding UTF8 $notesFilePath
+        Write-Host "    使用 notes 文件: release\v$version-notes.md" -ForegroundColor DarkGray
+    } else {
+        $Notes = "DesktopBox $tagName 发布包.`n`n绿色版,解压即用(含主程序 + 原生右键菜单 DLL)。`n运行环境:Windows 10/11 (64-bit),无需安装 .NET。"
+    }
 }
 
 # Release 已存在则只补充上传资产,否则新建
@@ -151,8 +158,14 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "    Release $tagName 已存在,上传/覆盖资产..." -ForegroundColor DarkGray
     & $ghExe release upload $tagName $zipPath --clobber --repo kof2000git/desktop_box
 } else {
-    & $ghExe release create $tagName $zipPath `
-        --title $tagName --notes $Notes --repo kof2000git/desktop_box
+    # notes 写临时文件传给 gh:--notes 多行字符串易被 PowerShell 参数解析拆散,--notes-file 更稳
+    $notesTmp = [System.IO.Path]::GetTempFileName()
+    try {
+        [System.IO.File]::WriteAllText($notesTmp, $Notes, [System.Text.UTF8Encoding]::new($false))
+        & $ghExe release create $tagName $zipPath `
+            --title $tagName --notes-file $notesTmp --repo kof2000git/desktop_box
+    }
+    finally { Remove-Item $notesTmp -ErrorAction SilentlyContinue }
 }
 if ($LASTEXITCODE -ne 0) { throw "GitHub Release 创建/上传失败" }
 
