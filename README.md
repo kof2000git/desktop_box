@@ -68,12 +68,12 @@
 
 ## 🖼️ Screenshots · 截图
 
-> _Screenshots coming soon · 截图待补充_
->
-> Add a desktop screenshot to `docs/screenshot.png`, then uncomment the image tag below.
-> 把整理后的桌面截图放到 `docs/screenshot.png`,然后取消下面图片引用的注释。
->
-> <!-- ![DesktopBox screenshot](docs/screenshot.png) -->
+<p align="center">
+  <img src="docs/screenshot.png" alt="DesktopBox 桌面整理效果" width="440">
+</p>
+
+_把桌面散乱文件整理进带标签页的盒子(只引用、不移动文件)。_
+_Tidy scattered desktop files into tabbed boxes — reference-only, no files moved._
 
 ---
 
