@@ -22,6 +22,7 @@ public partial class MainWindow : Window
         _settings = settings;
         DataContext = _vm;
         _vm.LoadCommand.Execute(null);
+        _vm.RefreshDesktopIconsState();
 
         Left = 0;
         Top = 0;
@@ -45,7 +46,6 @@ public partial class MainWindow : Window
         menu.Items.Add("新建盒子", null, (_, _) => _vm.AddBoxCommand.Execute(null));
         menu.Items.Add("添加系统图标盒子", null, (_, _) => _vm.AddSystemIconsBoxCommand.Execute(null));
         menu.Items.Add("一键整理桌面", null, (_, _) => _vm.OrganizeCommand.Execute(null));
-        menu.Items.Add("还原整理", null, (_, _) => _vm.RestoreOrganizeCommand.Execute(null));
         menu.Items.Add("隐藏/显示桌面图标", null, (_, _) => _vm.ToggleDesktopIconsCommand.Execute(null));
         menu.Items.Add("设置", null, (_, _) => OnOpenSettings(null, null));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -77,7 +77,6 @@ public partial class MainWindow : Window
     private void OnNewBox(object sender, RoutedEventArgs e) => _vm.AddBoxCommand.Execute(null);
     private void OnAddSystemIcons(object sender, RoutedEventArgs e) => _vm.AddSystemIconsBoxCommand.Execute(null);
     private void OnOrganize(object sender, RoutedEventArgs e) => _vm.OrganizeCommand.Execute(null);
-    private void OnRestoreOrganize(object sender, RoutedEventArgs e) => _vm.RestoreOrganizeCommand.Execute(null);
     private void OnToggleIcons(object sender, RoutedEventArgs e) => _vm.ToggleDesktopIconsCommand.Execute(null);
 
     private void OnOpenSettings(object? sender, RoutedEventArgs? e)

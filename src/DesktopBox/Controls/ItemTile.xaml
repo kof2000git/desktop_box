@@ -1,54 +1,43 @@
 <UserControl x:Class="DesktopBox.Controls.ItemTile"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:m="clr-namespace:DesktopBox.Models"
              MouseDoubleClick="OnDoubleClick"
+             PreviewMouseRightButtonUp="OnPreviewMouseRightButtonUp"
              ToolTip="{Binding TargetPath}"
              Cursor="Hand">
-    <UserControl.ContextMenu>
-        <ContextMenu>
-            <MenuItem Header="打开" Click="OnOpen"/>
-            <MenuItem Header="打开所在位置" Click="OnOpenLocation"/>
-            <Separator/>
-            <MenuItem Header="删除" Click="OnDelete"/>
-        </ContextMenu>
-    </UserControl.ContextMenu>
-    <StackPanel Width="68" Margin="2,3">
-        <Grid Width="44" Height="44" HorizontalAlignment="Center">
-            <!-- 无图标时的字母占位 -->
-            <Border x:Name="Fallback" CornerRadius="10">
-                <TextBlock x:Name="FallbackText"
-                           Foreground="White"
-                           FontSize="22"
-                           FontWeight="Bold"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"/>
-            </Border>
-            <!-- 真实图标:绑定 IconCachePath;为空时自动隐藏,露出上面的占位 -->
-            <Image Width="40" Height="40"
-                   Stretch="Uniform"
-                   RenderOptions.BitmapScalingMode="HighQuality"
-                   Source="{Binding IconCachePath}">
-                <Image.Style>
-                    <Style TargetType="Image">
-                        <Setter Property="Visibility" Value="Visible"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IconCachePath}" Value="{x:Null}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IconCachePath}" Value="">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Image.Style>
-            </Image>
-        </Grid>
-        <TextBlock Text="{Binding DisplayName}"
-                   Foreground="#FFEEEEEE"
-                   FontSize="11"
-                   TextAlignment="Center"
-                   TextTrimming="CharacterEllipsis"
-                   TextWrapping="NoWrap"
-                   Margin="0,3,0,0"/>
-    </StackPanel>
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis"/>
+    </UserControl.Resources>
+
+    <!-- 统一容器:用 StackPanel(可改方向) 承载 图标区 + 名称区 + 详情区 -->
+    <Border x:Name="Root" Padding="3">
+        <StackPanel x:Name="Panel" Orientation="Vertical">
+            <!-- 图标区 -->
+            <Grid x:Name="IconBox" Width="44" Height="44" HorizontalAlignment="Center">
+                <Border x:Name="Fallback" CornerRadius="10">
+                    <TextBlock x:Name="FallbackText"
+                               Foreground="White" FontSize="22" FontWeight="Bold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Image x:Name="Img" Width="40" Height="40"
+                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                       Source="{Binding IconCachePath}"/>
+            </Grid>
+            <!-- 名称区 -->
+            <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
+                       Foreground="#FFEEEEEE" FontSize="11"
+                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                       TextWrapping="NoWrap" Margin="0,3,0,0" MaxWidth="120"/>
+            <!-- 详情区(仅详细信息/平铺用) -->
+            <StackPanel x:Name="DetailBox" Orientation="Vertical" Visibility="Collapsed">
+                <TextBlock x:Name="ModifiedText" Text="{Binding ModifiedText}"
+                           Foreground="#FF999999" FontSize="9"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="SizeText" Text="{Binding SizeText}"
+                           Foreground="#FF999999" FontSize="9"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
 </UserControl>

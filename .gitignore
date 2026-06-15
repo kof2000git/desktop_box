@@ -9,5 +9,20 @@ obj/
 publish/
 release/
 
+## C++ 编译中间产物
+*.obj
+*.pdb
+
 ## 本地数据
 *.local.json
+
+## 运行时生成的配置/缓存/日志(随 exe 走,不入库)
+logs/
+icons/
+boxes.json
+organize.json
+
+## 编辑器/系统杂项
+Thumbs.db
+.DS_Store
+

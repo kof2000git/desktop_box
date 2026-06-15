@@ -1,4 +1,6 @@
+using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,6 +8,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DesktopBox.Models;
+using DesktopBox.Controls;
 using DesktopBox.Services;
 using DesktopBox.Views;
 
@@ -25,6 +28,37 @@ public partial class MainViewModel : ObservableObject
     /// <summary>用于自动布局新盒子的可用画布宽度(由 MainWindow 设置)。</summary>
     public double ScreenWidth { get; set; } = 1600;
 
+    /// <summary>全局视图模式:所有盒子/标签共享。变化时广播给所有盒子刷新。</summary>
+    [ObservableProperty] private ViewMode _globalViewMode = ViewMode.Large;
+
+    // 全局视图模式变化 → 通知所有盒子刷新其 IsLarge/.../IsTile
+    partial void OnGlobalViewModeChanged(ViewMode value)
+    {
+        foreach (var b in Boxes) b.SyncViewMode(value);
+        if (value == ViewMode.Detail) EnsureDetailFieldsForAll();
+        ScheduleSave();
+    }
+
+    /// <summary>切换全局视图模式(由 BoxControl 右键菜单调用)。</summary>
+    public void SetGlobalViewMode(ViewMode mode) => GlobalViewMode = mode;
+
+    /// <summary>把新建/加载的盒子加入集合并同步当前全局视图模式。</summary>
+    private void AddBoxSynced(BoxViewModel box)
+    {
+        box.SyncViewMode(GlobalViewMode);
+        Boxes.Add(box);
+    }
+
+    /// <summary>切到详细信息时惰性填充所有盒子条目的大小/修改时间。</summary>
+    private void EnsureDetailFieldsForAll()
+    {
+        foreach (var b in Boxes) EnsureDetailFields(b);
+    }
+
+    // 分类在标签盒子中的排列顺序
+    private static readonly string[] CategoryOrderArr =
+        { "应用程序", "文档", "图片", "视频", "音频", "快捷方式", "压缩包", "文件夹", "其他" };
+
     public MainViewModel(IPersistenceService store, IDropParserService parser,
                          IIconExtractorService icon, IOrganizeService organize,
                          IDesktopIconsService desktopIcons)
@@ -41,14 +75,47 @@ public partial class MainViewModel : ObservableObject
     {
         Boxes.Clear();
         var cfg = _store.Load();
+        GlobalViewMode = cfg.Settings.GlobalViewMode;
+
+        // 迁移系统图标 item 的旧 CLSID → SystemIcons.cs 当前定义。
+        // 历史遗留:旧版用过的 CLSID(如网络曾是 F02C2A56,在 Win11 上已无效)仍存在老 boxes.json 里,
+        // 导致图标提取和右键菜单对该项失败(E_INVALIDARG)。按 DisplayName 匹配当前定义并替换。
+        var sysClsids = SystemIcons.Definitions
+            .ToDictionary(d => d.Name, d => d.Clsid, StringComparer.OrdinalIgnoreCase);
+        foreach (var b in cfg.Boxes)
+        {
+            foreach (var it in b.Items.Concat(b.Tabs.SelectMany(t => t.Items)))
+            {
+                if (it.Type == ItemType.SystemIcon
+                    && sysClsids.TryGetValue(it.DisplayName ?? "", out var clsid)
+                    && !string.Equals(it.TargetPath, clsid, StringComparison.OrdinalIgnoreCase))
+                {
+                    it.TargetPath = clsid;
+                    it.IconCachePath = null;   // 清旧图标缓存路径,强制用新 CLSID 重新提取
+                }
+            }
+        }
+
+        var all = new List<BoxItem>();
         foreach (var b in cfg.Boxes.OrderBy(b => b.Order))
-            Boxes.Add(new BoxViewModel(b));
+        {
+            var vm = new BoxViewModel(b);
+            // 启动校正:旧坐标可能在屏外(换分辨率/拔屏幕),拉回可视区,避免"窗口消失找不到"
+            var (x, y) = SystemParametersHelper.ClampIntoScreens(vm.X, vm.Y);
+            vm.X = x; vm.Y = y;
+            AddBoxSynced(vm);
+            all.AddRange(vm.Items);
+            foreach (var t in vm.Tabs) all.AddRange(t.Items);
+        }
+        // 图标缓存可能丢失(icons 目录被删/exe 被搬到别的路径):后台重提。
+        // Extract 内部有 File.Exists 检查,命中则跳过、缺失则重建。
+        if (all.Count > 0) ExtractIconsInBackground(all);
     }
 
     [RelayCommand]
     private void AddBox()
     {
-        Boxes.Add(new BoxViewModel(new Box
+        AddBoxSynced(new BoxViewModel(new Box
         {
             Name = $"盒子 {Boxes.Count + 1}",
             Order = Boxes.Count
@@ -73,98 +140,129 @@ public partial class MainViewModel : ObservableObject
             : _parser.ParsePath(target);
 
         item.BoxId = box.Id;
-        item.Order = box.Items.Count;
-        box.Items.Add(item);
+        item.Order = box.DisplayItems.Count;   // 标签模式=当前标签,普通模式=Items
+        box.DisplayItems.Add(item);
         ExtractIconAsync(item);   // 单个拖入:后台提取,不阻塞
         ScheduleSave();
     }
 
-    public void RemoveItem(BoxViewModel box, BoxItem item)
+    /// <summary>从任意盒子(含任意标签)移除一个条目。</summary>
+    public void RemoveItemAnywhere(BoxItem item)
     {
-        box.Items.Remove(item);
-        ScheduleSave();
+        foreach (var box in Boxes)
+        {
+            if (box.Items.Remove(item)) { ScheduleSave(); return; }
+            foreach (var t in box.Tabs)
+                if (t.Items.Remove(item)) { ScheduleSave(); return; }
+        }
     }
 
-    // ---- 一键整理(只引用、不移动)----
+    // ---- 一键整理(增量):只把桌面新文件分类并入「桌面整理」标签盒子 ----
     [RelayCommand]
     private void Organize()
     {
-        if (_organize.HasActiveOrganize)
-        {
-            InputDialog.Inform("已存在一次整理操作。请先「还原整理」后再整理。");
-            return;
-        }
+        // 找整理盒子:manifest 指向 → 失效则回退找现有「桌面整理」标签盒子 → 都没有才新建。
+        // 回退查找可防止 manifest 丢失/损坏时重复建盒子。
+        Guid? knownId = _organize.GetOrganizeBoxId();
+        var box = knownId.HasValue ? Boxes.FirstOrDefault(b => b.Id == knownId.Value) : null;
+        box ??= Boxes.FirstOrDefault(b => b.Name == "桌面整理" && b.IsTabbed);
+        bool firstTime = box is null;
 
-        int count = _organize.CountOrganizable();
-        if (count == 0)
-        {
-            InputDialog.Inform("桌面上没有需要整理的项目。");
-            return;
-        }
+        if (box is null)
+            AddBoxSynced(box = new BoxViewModel(new Box { Name = "桌面整理", Width = 300, Height = 380, X = 40, Y = 40 }));
+        _organize.RecordBoxIds(new[] { box.Id });   // 始终刷新,确保 manifest 指向当前整理盒子
 
-        if (!InputDialog.Confirm(
-            $"检测到桌面有 {count} 个项目。\n\n" +
-            "将自动按类型(程序/文档/图片/压缩包/视频/音乐/文件夹/其他)分类," +
-            "为每个分类自动创建盒子,并【引用】桌面上的文件。\n\n" +
-            "✅ 文件不会被移动,写死桌面路径的其它程序/脚本照常工作。\n\n" +
-            "是否继续?\n(可用「还原整理」删除这些盒子)"))
-            return;
+        // 增量:扫描 → 排除已在整理盒子里的 → 分类并入对应标签
+        var scanned = _organize.ScanAndCategorize();
+        var existing = new HashSet<string>(
+            box.Tabs.SelectMany(t => t.Items).Select(i => i.TargetPath),
+            StringComparer.OrdinalIgnoreCase);
+        var newEntries = scanned.Where(s => !existing.Contains(s.Path)).ToList();
 
-        var result = _organize.Organize();
-        if (result is null || result.Entries.Count == 0)
-        {
-            InputDialog.Inform("没有可整理的项目。");
-            return;
-        }
-
-        var newBoxes = new List<BoxViewModel>();
         var allItems = new List<BoxItem>();
-        foreach (var g in result.Entries.GroupBy(e => e.Category).OrderBy(g => g.Key))
+        foreach (var g in newEntries.GroupBy(e => e.Category).OrderBy(g => CategoryOrder(g.Key)))
         {
-            var box = new BoxViewModel(new Box { Name = g.Key, Width = 240, Height = 320 });
-            foreach (var it in g.OrderBy(e => e.DisplayName))
+            var tab = box.Tabs.FirstOrDefault(t => t.Name == g.Key) ?? NewTab(box, g.Key);
+            foreach (var it in g.OrderBy(e => System.IO.Path.GetFileName(e.Path)))
             {
-                var item = _parser.ParsePath(it.CurrentPath);
+                var item = _parser.ParsePath(it.Path);
                 item.BoxId = box.Id;
-                item.DisplayName = it.DisplayName;
-                item.Order = box.Items.Count;
-                box.Items.Add(item);
+                item.DisplayName = OrganizeDisplayName(it.Path);
+                item.Order = tab.Items.Count;
+                tab.Items.Add(item);
                 allItems.Add(item);
             }
-            newBoxes.Add(box);
-            Boxes.Add(box);
         }
 
-        LayoutNewBoxes(newBoxes);
-        _organize.RecordBoxIds(newBoxes.Select(b => b.Id));
+        // 系统图标标签(首次或缺失时补上,放最后)
+        bool sysAdded = EnsureSystemIconsTab(box, allItems);
+
+        box.SelectedTab = box.Tabs.FirstOrDefault();
         Save();
+        if (allItems.Count > 0) ExtractIconsInBackground(allItems);
 
-        InputDialog.Inform($"整理完成!已创建 {newBoxes.Count} 个盒子,共 {result.Entries.Count} 个项目。\n(文件未移动,图标稍候加载。)\n\n想让桌面更干净?可用「隐藏/显示桌面图标」隐藏原始图标。");
+        // 整理后隐藏桌面图标:盒子已收纳这些图标,桌面再显示就重复了。告知用户如何还原显示。
+        bool hidIcons = false;
+        if (DesktopIconsVisible)
+        {
+            _desktopIcons.SetVisible(false);
+            DesktopIconsVisible = false;
+            hidIcons = true;
+        }
 
-        ExtractIconsInBackground(allItems);
+        var msg = newEntries.Count == 0
+            ? (firstTime
+                ? "桌面上没有需要整理的文件,仅创建了「桌面整理」盒子并添加系统图标。"
+                : (sysAdded ? "已补上系统图标,没有新的桌面文件需要整理。" : "没有新的桌面文件需要整理,已全部归类。"))
+            : $"已整理 {newEntries.Count} 个新文件到「桌面整理」盒子{(sysAdded ? "(并添加系统图标)" : "")}。\n(文件未移动,图标稍候加载。)";
+        if (hidIcons)
+            msg += "\n\n为避免桌面图标与盒子里的重复显示,已自动隐藏桌面图标。\n" +
+                   "如需重新显示桌面图标:点托盘菜单的「隐藏/显示桌面图标」,或盒子标题栏右侧的眼睛图标。";
+        InputDialog.Inform(msg);
     }
 
-    [RelayCommand]
-    private void RestoreOrganize()
+    /// <summary>新建标签并加入盒子,返回该标签。</summary>
+    private static BoxTab NewTab(BoxViewModel box, string name)
     {
-        if (!_organize.HasActiveOrganize)
+        var tab = new BoxTab { Name = name };
+        box.Tabs.Add(tab);
+        return tab;
+    }
+
+    /// <summary>确保整理盒子有「系统图标」标签(此电脑/回收站/控制面板/网络)。已有则不动。</summary>
+    private bool EnsureSystemIconsTab(BoxViewModel box, List<BoxItem> extracted)
+    {
+        if (box.Tabs.Any(t => t.Name == "系统图标")) return false;
+        var tab = new BoxTab { Name = "系统图标" };
+        foreach (var def in SystemIcons.Definitions)
         {
-            InputDialog.Inform("没有可还原的整理操作。");
-            return;
+            var item = new BoxItem
+            {
+                Type = ItemType.SystemIcon,
+                TargetPath = def.Clsid,
+                DisplayName = def.Name,
+                BoxId = box.Id,
+                Order = tab.Items.Count
+            };
+            tab.Items.Add(item);
+            extracted.Add(item);
         }
+        box.Tabs.Add(tab);
+        return true;
+    }
 
-        if (!InputDialog.Confirm("将删除这次自动生成的分类盒子。\n(文件从未移动,无需移回;手动建的盒子不受影响)\n是否继续?"))
-            return;
+    /// <summary>整理时的显示名:.lnk 去扩展名,其余用完整文件名(与旧版一致)。</summary>
+    private static string OrganizeDisplayName(string path)
+    {
+        var n = System.IO.Path.GetFileName(path);
+        return n.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+            ? System.IO.Path.GetFileNameWithoutExtension(n) : n;
+    }
 
-        var result = _organize.Restore();
-        if (result?.Manifest?.BoxIds is { Count: > 0 } ids)
-        {
-            foreach (var b in Boxes.Where(b => ids.Contains(b.Id)).ToList())
-                Boxes.Remove(b);
-        }
-        Save();
-
-        InputDialog.Inform("已删除自动生成的分类盒子。文件仍在桌面原处。");
+    private static int CategoryOrder(string c)
+    {
+        int i = Array.IndexOf(CategoryOrderArr, c);
+        return i < 0 ? 99 : i;
     }
 
     // ---- 系统图标盒子(回收站/此电脑/控制面板)----
@@ -194,7 +292,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         PlaceBoxAtNextSlot(box);
-        Boxes.Add(box);
+        AddBoxSynced(box);
         Save();
         ExtractIconsInBackground(items);
     }
@@ -207,28 +305,101 @@ public partial class MainViewModel : ObservableObject
         box.Y = 40 + (idx / cols) * 340;
     }
 
+    // ---- 标签盒子:手动合并 / 拆分 ----
+
+    /// <summary>普通盒子转标签盒子:现有条目移入首个标签。</summary>
+    [RelayCommand]
+    private void ConvertToTabbed(BoxViewModel? box)
+    {
+        if (box is null || box.IsTabbed) return;
+        var tab = new BoxTab { Name = string.IsNullOrWhiteSpace(box.Name) ? "标签 1" : box.Name };
+        foreach (var it in box.Items.ToList())
+        {
+            it.BoxId = box.Id;
+            tab.Items.Add(it);
+        }
+        box.Items.Clear();
+        box.Tabs.Add(tab);
+        box.SelectedTab = tab;
+        ScheduleSave();
+    }
+
+    /// <summary>把 other 合并进 target 作为新标签(普通盒子或标签盒子均可)。</summary>
+    public void MergeIn(BoxViewModel target, BoxViewModel other)
+    {
+        if (target.Id == other.Id) return;
+
+        if (other.IsTabbed)
+        {
+            foreach (var t in other.Tabs.ToList())
+            {
+                var nt = new BoxTab { Name = t.Name };
+                foreach (var it in t.Items.ToList()) { it.BoxId = target.Id; nt.Items.Add(it); }
+                target.Tabs.Add(nt);
+            }
+        }
+        else
+        {
+            var nt = new BoxTab { Name = string.IsNullOrWhiteSpace(other.Name) ? "标签" : other.Name };
+            foreach (var it in other.Items.ToList()) { it.BoxId = target.Id; nt.Items.Add(it); }
+            target.Tabs.Add(nt);
+        }
+
+        target.SelectedTab = target.Tabs.LastOrDefault();
+        Boxes.Remove(other);
+        ScheduleSave();
+    }
+
+    /// <summary>标签盒子拆分为独立盒子:每个标签变成一个盒子,位置略有错开。</summary>
+    [RelayCommand]
+    private void SplitBox(BoxViewModel? box)
+    {
+        if (box is null || !box.IsTabbed) return;
+        if (!InputDialog.Confirm($"将盒子「{box.Name}」拆分为 {box.Tabs.Count} 个独立盒子?\n(每个标签变成一个单独盒子,位置略有错开,可拖开)"))
+            return;
+
+        int index = Boxes.IndexOf(box);
+        double baseX = box.X, baseY = box.Y;
+        var created = new List<BoxViewModel>();
+        int i = 0;
+        foreach (var tab in box.Tabs.ToList())
+        {
+            var nb = new BoxViewModel(new Box
+            {
+                Name = tab.Name,
+                X = baseX + (i % 4) * 30,
+                Y = baseY + (i / 4) * 30,
+                Width = box.Width,
+                Height = box.Height
+            });
+            foreach (var it in tab.Items.ToList()) { it.BoxId = nb.Id; nb.Items.Add(it); }
+            created.Add(nb);
+            i++;
+        }
+
+        Boxes.Remove(box);
+        for (int j = 0; j < created.Count; j++)
+        {
+            created[j].SyncViewMode(GlobalViewMode);
+            Boxes.Insert(index + j, created[j]);
+        }
+        ScheduleSave();
+    }
+
     // ---- 桌面图标显隐(纯视觉,不动文件)----
+    /// <summary>当前桌面图标是否可见(可观察:按钮颜色据此变化)。</summary>
+    [ObservableProperty] private bool _desktopIconsVisible = true;
+
     [RelayCommand]
     private void ToggleDesktopIcons()
     {
-        var visible = !_desktopIcons.AreIconsVisible;
+        var visible = !DesktopIconsVisible;
         _desktopIcons.SetVisible(visible);
-        InputDialog.Inform(visible
-            ? "已显示桌面图标。"
-            : "已隐藏桌面图标。\n(文件没有移动,只是视觉隐藏;再次点击可恢复)");
+        DesktopIconsVisible = visible;
     }
 
-    private void LayoutNewBoxes(List<BoxViewModel> newBoxes)
-    {
-        int cols = Math.Max(1, (int)((ScreenWidth - 40) / 260));
-        for (int i = 0; i < newBoxes.Count; i++)
-        {
-            int col = i % cols;
-            int row = i / cols;
-            newBoxes[i].X = 40 + col * 260;
-            newBoxes[i].Y = 40 + row * 340;
-        }
-    }
+    /// <summary>启动后读取真实状态,刷新按钮颜色。</summary>
+    public void RefreshDesktopIconsState() => DesktopIconsVisible = _desktopIcons.AreIconsVisible;
 
     /// <summary>后台批量提取图标,逐个回到 UI 线程更新(BoxItem.IconCachePath 可观察,磁贴自动刷新)。</summary>
     private void ExtractIconsInBackground(List<BoxItem> items)
@@ -251,6 +422,54 @@ public partial class MainViewModel : ObservableObject
 
     private void ExtractIconAsync(BoxItem item) => ExtractIconsInBackground(new List<BoxItem> { item });
 
+    /// <summary>为详细信息视图惰性填充每个条目的大小/修改时间(后台线程,逐个回 UI 更新)。</summary>
+    public void EnsureDetailFields(BoxViewModel box)
+    {
+        var items = box.DisplayItems.Where(i => i.ModifiedText is null).ToList();
+        if (items.Count == 0) return;
+        Task.Run(() =>
+        {
+            foreach (var it in items)
+            {
+                string? size = null, mod = null;
+                try
+                {
+                    // 系统图标/网址等没有文件实体,显示占位
+                    if (it.Type == ItemType.SystemIcon || it.TargetPath.StartsWith("::") ||
+                        it.Type == ItemType.Url || it.TargetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        size = "—"; mod = "—";
+                    }
+                    else if (Directory.Exists(it.TargetPath))
+                    {
+                        size = "—"; // 文件夹不显示大小
+                        mod = new DirectoryInfo(it.TargetPath).LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                    }
+                    else if (File.Exists(it.TargetPath))
+                    {
+                        var fi = new FileInfo(it.TargetPath);
+                        size = FormatSize(fi.Length);
+                        mod = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                    }
+                }
+                catch { }
+
+                var disp = Application.Current?.Dispatcher;
+                if (disp is null || disp.HasShutdownStarted) continue;
+                var s = size; var m = mod;
+                disp.BeginInvoke(new Action(() => { it.SizeText = s; it.ModifiedText = m; }));
+            }
+        });
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.#} GB"
+    };
+
     // ---- 持久化 ----
     public void ScheduleSave()
     {
@@ -268,6 +487,7 @@ public partial class MainViewModel : ObservableObject
         {
             var existing = _store.Load();
             var cfg = new AppConfig { Settings = existing.Settings };
+            cfg.Settings.GlobalViewMode = GlobalViewMode;
             int order = 0;
             // 快照:避免后台线程枚举时集合被 UI 线程修改
             foreach (var b in Boxes.ToList())

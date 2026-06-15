@@ -13,5 +13,10 @@ public partial class BoxItem : ObservableObject
 
     [ObservableProperty] private string? _iconCachePath;
 
+    /// <summary>详细信息视图用:文件大小(文件夹为空,显示"—")。惰性填充,可观察。</summary>
+    [ObservableProperty] private string? _sizeText;
+    /// <summary>详细信息视图用:最后修改时间。惰性填充,可观察。</summary>
+    [ObservableProperty] private string? _modifiedText;
+
     public int Order { get; set; }
 }

@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -25,9 +27,10 @@ public partial class App : Application
         // 否则任何对话框/窗口关闭都可能被 WPF 当成"最后一个窗口关闭"而退出程序。
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先)
+        // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先);同时落盘日志便于事后排查
         DispatcherUnhandledException += (_, args) =>
         {
+            LogError(args.Exception, "DispatcherUnhandledException");
             try
             {
                 MessageBox.Show($"发生了一个错误,但程序将继续运行:\n\n{args.Exception.Message}",
@@ -36,7 +39,11 @@ public partial class App : Application
             catch { }
             args.Handled = true;
         };
-        AppDomain.CurrentDomain.UnhandledException += (_, _) => { /* 仅吞掉,避免静默崩溃 */ };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            // 后台线程/致命异常(如 0xc0000005 访问违规)会到这里,记录以便事后排查
+            LogError(args.ExceptionObject as Exception, "AppDomain.UnhandledException");
+        };
 
         // 单实例:防止多开导致配置打架
         _mutex = new Mutex(true, @"Global\DesktopBox_SingleInstance", out var createdNew);
@@ -47,6 +54,7 @@ public partial class App : Application
         }
 
         Services = ConfigureServices();
+        MigrateLegacyConfig(); // 便携化:把旧版 %AppData%\DesktopBox 配置一次性搬到 exe 同目录
         base.OnStartup(e);
 
         // 主题
@@ -59,9 +67,67 @@ public partial class App : Application
         var main = Services.GetRequiredService<MainWindow>();
         main.Show();
 
-        // 贴桌面层;失败则降级为置顶窗口,绝不崩
+        // 贴桌面层(WorkerW 子窗口):在桌面图标层,浏览器等普通窗口在其之上,不互相遮挡。
+        // reparent 失败时退化为普通窗口(非置顶)——置顶会挡住浏览器等,体验更差。记录日志便于排查。
         if (!Services.GetRequiredService<IDesktopService>().AttachToDesktop(main))
-            main.Topmost = true;
+            App.LogError(new Exception("AttachToDesktop failed; window stays as normal (non-topmost)"), "App.OnStartup");
+    }
+
+    /// <summary>一次性把旧版 %AppData%\DesktopBox 下的配置搬到可执行文件同目录(仅在目标缺失时复制)。</summary>
+    private static void MigrateLegacyConfig()
+    {
+        try
+        {
+            var legacyDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DesktopBox");
+            if (!Directory.Exists(legacyDir)) return;
+
+            foreach (var (legacy, current) in new (string, string)[]
+            {
+                (Path.Combine(legacyDir, "boxes.json"),    Models.AppPaths.ConfigPath),
+                (Path.Combine(legacyDir, "organize.json"), Models.AppPaths.OrganizePath),
+            })
+            {
+                if (!File.Exists(legacy) || File.Exists(current)) continue;
+                var dir = Path.GetDirectoryName(current);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                File.Copy(legacy, current);
+            }
+        }
+        catch { /* 迁移失败不影响启动 */ }
+    }
+
+    /// <summary>把异常(含内部异常链与堆栈)追加写入 AppPaths.LogPath,便于事后排查。</summary>
+    public static void LogError(Exception? ex, string source)
+    {
+        if (ex is null) return;
+        try
+        {
+            var path = Models.AppPaths.LogPath;
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            var sb = new StringBuilder();
+            sb.AppendLine("================================================");
+            sb.AppendLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] source={source}");
+            AppendException(sb, ex, 0);
+            File.AppendAllText(path, sb.ToString());
+        }
+        catch { /* 写日志本身失败绝不能影响程序 */ }
+    }
+
+    private static void AppendException(StringBuilder sb, Exception ex, int depth)
+    {
+        var indent = new string(' ', depth * 2);
+        sb.AppendLine($"{indent}Type:    {ex.GetType().FullName}");
+        sb.AppendLine($"{indent}Message: {ex.Message}");
+        sb.AppendLine($"{indent}HResult: 0x{ex.HResult:X8}");
+        sb.AppendLine($"{indent}StackTrace:");
+        sb.AppendLine($"{indent}  {ex.StackTrace?.Trim() ?? "(无)"}");
+        if (ex.InnerException is { } inner)
+        {
+            sb.AppendLine($"{indent}---> InnerException:");
+            AppendException(sb, inner, depth + 1);
+        }
     }
 
     private static IServiceProvider ConfigureServices()

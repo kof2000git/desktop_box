@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace DesktopBox.Native;
 
@@ -36,6 +37,18 @@ public static class User32
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr GetParent(IntPtr hWnd);
+
+    public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const long WS_EX_TOPMOST = 0x00000008;
+
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
 
@@ -46,20 +59,26 @@ public static class User32
     public static IntPtr GetWorkerW()
     {
         var progman = GetProgman();
-        SendMessageTimeout(progman, WM_SPAWN_WORKERW, IntPtr.Zero, IntPtr.Zero, SMTO_NORMAL, 1000, out _);
-
-        IntPtr workerW = IntPtr.Zero;
-        EnumWindows((topHwnd, _) =>
+        if (progman == IntPtr.Zero) return IntPtr.Zero;
+        // 0x052C 让 Progman 创建 WorkerW,但创建有延迟,需重试几次 EnumWindows 才能找到
+        for (int attempt = 0; attempt < 5; attempt++)
         {
-            var shellDefView = FindWindowEx(topHwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
-            if (shellDefView != IntPtr.Zero)
+            SendMessageTimeout(progman, WM_SPAWN_WORKERW, IntPtr.Zero, IntPtr.Zero, SMTO_NORMAL, 1000, out _);
+            IntPtr workerW = IntPtr.Zero;
+            EnumWindows((topHwnd, _) =>
             {
-                workerW = FindWindowEx(IntPtr.Zero, topHwnd, "WorkerW", null);
-                return false;
-            }
-            return true;
-        }, IntPtr.Zero);
-        return workerW;
+                var shellDefView = FindWindowEx(topHwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
+                if (shellDefView != IntPtr.Zero)
+                {
+                    workerW = FindWindowEx(IntPtr.Zero, topHwnd, "WorkerW", null);
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+            if (workerW != IntPtr.Zero) return workerW;
+            Thread.Sleep(60);
+        }
+        return IntPtr.Zero;
     }
 
     /// <summary>定位桌面图标视图窗口 SHELLDLL_DefView(用于控制桌面图标显隐)。</summary>

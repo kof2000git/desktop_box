@@ -1,21 +1,19 @@
-using DesktopBox.Models;
-
 namespace DesktopBox.Services;
 
 public interface IOrganizeService
 {
-    /// <summary>桌面上可被整理的项目数量(预览/确认用)。</summary>
-    int CountOrganizable();
-
-    /// <summary>是否存在尚未还原的整理操作。</summary>
+    /// <summary>是否已有整理盒子记录(organize.json 存在)。</summary>
     bool HasActiveOrganize { get; }
 
-    /// <summary>执行整理(只引用、不移动):扫描桌面、分类、写清单。返回条目供建盒子;无项目返回 null。</summary>
-    OrganizeResult? Organize();
+    /// <summary>桌面可整理条目总数(提示用)。</summary>
+    int CountOrganizable();
 
-    /// <summary>记录本次整理自动生成的盒子 Id(还原时用于删除)。</summary>
+    /// <summary>扫描桌面并按类型分类,返回 (完整路径, 分类名) 列表。不写任何记录。</summary>
+    List<(string Path, string Category)> ScanAndCategorize();
+
+    /// <summary>记录整理盒子的 id(标识哪个盒子是自动整理的,便于增量复用)。</summary>
     void RecordBoxIds(IEnumerable<Guid> boxIds);
 
-    /// <summary>还原:仅删除清单(文件从未移动,无需移回)。返回清单(含 BoxIds);无可还原返回 null。</summary>
-    OrganizeResult? Restore();
+    /// <summary>读取整理盒子 id;无记录返回 null。</summary>
+    Guid? GetOrganizeBoxId();
 }

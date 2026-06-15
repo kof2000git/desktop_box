@@ -11,8 +11,5 @@ public class AppConfig
     [JsonPropertyName("settings")]
     public AppSettings Settings { get; set; } = new();
 
-    public static string DefaultPath =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "DesktopBox", "boxes.json");
+    public static string DefaultPath => AppPaths.ConfigPath;
 }

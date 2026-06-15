@@ -1,5 +1,5 @@
 using System.IO;
-using DesktopBox.Models;
+using System.Linq;
 using DesktopBox.Services;
 using FluentAssertions;
 using Moq;
@@ -34,16 +34,16 @@ public class OrganizeServiceTests
     }
 
     [Fact]
-    public void Organize_ReferencesWithoutMovingFiles()
+    public void ScanAndCategorize_ReferencesWithoutMovingFiles()
     {
         var svc = Setup(out var files);
         try
         {
-            var res = svc.Organize();
+            var entries = svc.ScanAndCategorize();
 
-            res.Should().NotBeNull();
-            res!.Entries.Should().HaveCount(4);
-            svc.HasActiveOrganize.Should().BeTrue();
+            entries.Should().HaveCount(4);
+            // 扫描分类不写 manifest
+            svc.HasActiveOrganize.Should().BeFalse();
 
             // 关键:文件原封不动留在桌面
             File.Exists(files[0]).Should().BeTrue();
@@ -51,34 +51,18 @@ public class OrganizeServiceTests
             File.Exists(files[2]).Should().BeTrue();
             Directory.Exists(files[3]).Should().BeTrue();
 
-            // 条目路径就是原始路径(引用)
-            res.Entries.Should().OnlyContain(e => e.CurrentPath.StartsWith(_desktop!));
+            // 路径为原始路径(引用),分类正确
+            entries.Should().OnlyContain(e => e.Path.StartsWith(_desktop!));
+            entries.Single(e => e.Path == files[0]).Category.Should().Be("文档");
+            entries.Single(e => e.Path == files[1]).Category.Should().Be("图片");
+            entries.Single(e => e.Path == files[2]).Category.Should().Be("应用程序");
+            entries.Single(e => e.Path == files[3]).Category.Should().Be("文件夹");
         }
         finally { Cleanup(); }
     }
 
     [Fact]
-    public void Restore_ClearsManifestWithoutTouchingFiles()
-    {
-        var svc = Setup(out var files);
-        try
-        {
-            svc.Organize();
-            var res = svc.Restore();
-
-            res.Should().NotBeNull();
-            svc.HasActiveOrganize.Should().BeFalse();
-
-            // 文件依旧在原位(还原不移动任何东西)
-            File.Exists(files[0]).Should().BeTrue();
-            File.Exists(files[2]).Should().BeTrue();
-            Directory.Exists(files[3]).Should().BeTrue();
-        }
-        finally { Cleanup(); }
-    }
-
-    [Fact]
-    public void Organize_WithEmptyDesktop_ReturnsNull()
+    public void ScanAndCategorize_WithEmptyDesktop_ReturnsEmpty()
     {
         _desktop = Directory.CreateTempSubdirectory("dbx_empty_").FullName;
         _manifest = Path.Combine(Path.GetTempPath(), "dbx_man_" + Guid.NewGuid().ToString("N") + ".json");
@@ -87,8 +71,37 @@ public class OrganizeServiceTests
         var svc = new OrganizeService(scanner.Object, new CategorizerService(), _manifest);
         try
         {
-            svc.Organize().Should().BeNull();
+            svc.ScanAndCategorize().Should().BeEmpty();
             svc.HasActiveOrganize.Should().BeFalse();
+        }
+        finally { Cleanup(); }
+    }
+
+    [Fact]
+    public void RecordBoxIds_ThenGetOrganizeBoxId_RoundTrips()
+    {
+        var svc = Setup(out _);
+        try
+        {
+            svc.HasActiveOrganize.Should().BeFalse();
+            svc.GetOrganizeBoxId().Should().BeNull();
+
+            var id = Guid.NewGuid();
+            svc.RecordBoxIds(new[] { id });
+
+            svc.HasActiveOrganize.Should().BeTrue();
+            svc.GetOrganizeBoxId().Should().Be(id);
+        }
+        finally { Cleanup(); }
+    }
+
+    [Fact]
+    public void GetOrganizeBoxId_WhenManifestMissing_ReturnsNull()
+    {
+        var svc = Setup(out _);
+        try
+        {
+            svc.GetOrganizeBoxId().Should().BeNull();
         }
         finally { Cleanup(); }
     }

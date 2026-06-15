@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using DesktopBox.Models;
@@ -10,17 +12,36 @@ namespace DesktopBox.Controls;
 
 public partial class ItemTile : UserControl
 {
+    /// <summary>磁贴渲染尺寸/布局(由盒子 ViewMode 决定)。变化时重排内部元素。</summary>
+    public static readonly DependencyProperty IconSizeProperty =
+        DependencyProperty.Register(nameof(IconSize), typeof(TileSize), typeof(ItemTile),
+            new PropertyMetadata(TileSize.Large, OnIconSizeChanged));
+
+    public TileSize IconSize
+    {
+        get => (TileSize)GetValue(IconSizeProperty);
+        set => SetValue(IconSizeProperty, value);
+    }
+
     public ItemTile()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => SetFallback();
+        DataContextChanged += (_, _) =>
+        {
+            SetFallback();
+            ApplyLayout();
+        };
     }
 
     private void SetFallback()
     {
         if (DataContext is not BoxItem item) return;
         FallbackText.Text = GetGlyph(item);
-        Fallback.Background = new SolidColorBrush(GetFallbackColor(item));
+        // 不设彩色背景块:让图标/首字与系统原版一致(无底色)
+        Fallback.Background = Brushes.Transparent;
+        // 图标为空时隐藏 Image、显示占位首字;有图标时反之
+        bool hasIcon = !string.IsNullOrEmpty(item.IconCachePath);
+        Img.Visibility = hasIcon ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string GetGlyph(BoxItem item)
@@ -35,26 +56,86 @@ public partial class ItemTile : UserControl
         return char.ToUpperInvariant(c).ToString();
     }
 
-    private static Color GetFallbackColor(BoxItem item) => item.Type switch
+    /// <summary>根据 TileSize 调整容器方向、图标尺寸、详情可见性。</summary>
+    private static void OnIconSizeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((ItemTile)d).ApplyLayout();
+
+    private void ApplyLayout()
     {
-        ItemType.Folder     => Color.FromRgb(0x4C, 0xAF, 0x50),
-        ItemType.Url        => Color.FromRgb(0x1E, 0x88, 0xE5),
-        ItemType.Shortcut   => Color.FromRgb(0x8E, 0x24, 0xAA),
-        ItemType.SystemIcon => Color.FromRgb(0xF5, 0xA6, 0x23), // 琥珀
-        _                   => Color.FromRgb(0x6D, 0x4C, 0x41)
-    };
+        if (!IsInitialized) return;
+        var size = IconSize;
+
+        switch (size)
+        {
+            case TileSize.Large:
+                Panel.Orientation = Orientation.Vertical;
+                SetIcon(56, 50, 28, HorizontalAlignment.Center);
+                NameText.TextAlignment = TextAlignment.Center;
+                NameText.FontSize = 12;
+                NameText.MaxWidth = 140;
+                DetailBox.Visibility = Visibility.Collapsed;
+                Root.Padding = new Thickness(4);
+                break;
+            case TileSize.Medium:
+                Panel.Orientation = Orientation.Vertical;
+                SetIcon(44, 38, 22, HorizontalAlignment.Center);
+                NameText.TextAlignment = TextAlignment.Center;
+                NameText.FontSize = 11;
+                NameText.MaxWidth = 120;
+                DetailBox.Visibility = Visibility.Collapsed;
+                break;
+            case TileSize.Small:
+            case TileSize.List:
+                // 图标在左,名称在右
+                Panel.Orientation = Orientation.Horizontal;
+                SetIcon(26, 22, 15, HorizontalAlignment.Center);
+                NameText.TextAlignment = TextAlignment.Left;
+                NameText.FontSize = 12;
+                NameText.VerticalAlignment = VerticalAlignment.Center;
+                NameText.Margin = new Thickness(6, 0, 4, 0);
+                DetailBox.Visibility = Visibility.Collapsed;
+                break;
+            case TileSize.Detail:
+                Panel.Orientation = Orientation.Horizontal;
+                SetIcon(26, 22, 15, HorizontalAlignment.Center);
+                NameText.TextAlignment = TextAlignment.Left;
+                NameText.FontSize = 12;
+                NameText.VerticalAlignment = VerticalAlignment.Center;
+                NameText.Margin = new Thickness(6, 0, 4, 0);
+                DetailBox.Visibility = Visibility.Visible;
+                DetailBox.Orientation = Orientation.Horizontal;
+                DetailBox.Margin = new Thickness(10, 0, 0, 0);
+                break;
+            case TileSize.Tile:
+                Panel.Orientation = Orientation.Horizontal;
+                SetIcon(44, 38, 22, HorizontalAlignment.Center);
+                NameText.TextAlignment = TextAlignment.Left;
+                NameText.FontSize = 12;
+                NameText.VerticalAlignment = VerticalAlignment.Center;
+                NameText.Margin = new Thickness(8, 0, 8, 0);
+                DetailBox.Visibility = Visibility.Visible;
+                DetailBox.Orientation = Orientation.Vertical;
+                break;
+        }
+    }
+
+    private void SetIcon(double box, double img, double fallbackFont, HorizontalAlignment align)
+    {
+        IconBox.Width = box; IconBox.Height = box;
+        Img.Width = img; Img.Height = img;
+        FallbackText.FontSize = fallbackFont;
+        IconBox.HorizontalAlignment = align;
+    }
 
     private BoxItem? Item => DataContext as BoxItem;
 
     private void OnDoubleClick(object sender, MouseButtonEventArgs e) => OpenItem();
-    private void OnOpen(object sender, RoutedEventArgs e) => OpenItem();
 
     private void OpenItem()
     {
         if (Item is null) return;
         try
         {
-            // 系统图标(Shell 虚拟项)用 explorer 打开 ::{CLSID}
             if (Item.Type == ItemType.SystemIcon || Item.TargetPath.StartsWith("::"))
                 Process.Start(new ProcessStartInfo("explorer.exe", Item.TargetPath) { UseShellExecute = true });
             else
@@ -66,36 +147,130 @@ public partial class ItemTile : UserControl
         }
     }
 
-    private void OnOpenLocation(object sender, RoutedEventArgs e)
+    /// <summary>右键:WPF 原生上下文菜单(打开/在资源管理器中显示/复制路径/从盒子移除)。
+    /// 不再宿主 Shell 原生 IContextMenu —— 它在"主窗口 reparent 到 WorkerW"环境下,COM 自绘回调会
+    /// 触发访问违规(CSE,0xc0000005),进程直接崩且 Dispatcher 无法捕获。改用 WPF 菜单彻底根除。
+    /// 原生菜单的"属性/发送到/打开方式"通过"在资源管理器中显示"间接获得,能力不丢。</summary>
+    // 原生 Shell 右键菜单由 C++ DLL(DesktopBox.ShellMenu.dll)提供,绕过 .NET COM interop 的 CSE 崩溃
+    // (.NET 8 宿主 IContextMenu 自绘稳定触发 0xc0000005,CSE 不留堆栈无法根治;C++/Win32 同款实现稳定)。
+    // 返回 0x7000=用户选了"从盒子移除";其他=取消或已执行选中的 Shell 命令(打开/编辑/打印/发送到/...)。
+    [DllImport("DesktopBox.ShellMenu.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int ShowShellMenu(string path, int screenX, int screenY);
+
+    private void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (Item is null) return;
-        // 系统图标与网址没有"所在文件夹",直接打开它
-        if (Item.Type == ItemType.SystemIcon || Item.Type == ItemType.Url || Item.TargetPath.StartsWith("::"))
-        {
-            OpenItem();
-            return;
-        }
-        try
-        {
-            var dir = Path.GetDirectoryName(Item.TargetPath) ?? "";
-            Process.Start("explorer.exe", $"\"{dir}\"");
-        }
-        catch { }
+        e.Handled = true;
+        var pt = PointToScreen(new Point(0, ActualHeight));
+        int result = 0;
+        try { result = ShowShellMenu(Item.TargetPath, (int)pt.X, (int)pt.Y); }
+        catch (Exception ex) { App.LogError(ex, "ItemTile.ShowShellMenu"); }   // DLL 缺失/P-Invoke 失败时记录
+        if (result == 0x7000) RemoveFromBox();
     }
 
-    private void OnDelete(object sender, RoutedEventArgs e)
+    private ContextMenu BuildContextMenu()
+    {
+        var item = Item!;
+        var menu = new ContextMenu();
+
+        if (item.Type != ItemType.SystemIcon && item.Type != ItemType.Url
+            && !item.TargetPath.StartsWith("::"))
+        {
+            // 普通文件/文件夹/快捷方式:动态获取该文件类型的 Shell 动词(open/edit/print/runas/...),
+            // 让菜单随文件类型变化(不再统一)。用托管 ProcessStartInfo.Verbs,不走 COM IContextMenu,不崩。
+            string[] verbs = Array.Empty<string>();
+            try { verbs = new ProcessStartInfo(item.TargetPath) { UseShellExecute = true }.Verbs; }
+            catch (Exception ex) { App.LogError(ex, "ItemTile.QueryVerbs"); }
+
+            bool added = false;
+            foreach (var v in verbs)
+            {
+                if (string.IsNullOrEmpty(v)) continue;
+                var verb = v;
+                var mi = new MenuItem { Header = VerbDisplayName(verb) };
+                mi.Click += (_, _) =>
+                {
+                    try { Process.Start(new ProcessStartInfo(item.TargetPath) { Verb = verb, UseShellExecute = true }); }
+                    catch (Exception ex) { App.LogError(ex, "ItemTile.VerbInvoke"); }
+                };
+                menu.Items.Add(mi);
+                added = true;
+            }
+            if (added) menu.Items.Add(new Separator());
+
+            var miLoc = new MenuItem { Header = "在资源管理器中显示" };
+            miLoc.Click += (_, _) => OpenLocation();
+            menu.Items.Add(miLoc);
+        }
+        else
+        {
+            // 系统图标/网址:只有"打开"(explorer 打开 ::{CLSID} 或浏览器打开 URL)
+            var miOpen = new MenuItem { Header = "打开" };
+            miOpen.Click += (_, _) => OpenItem();
+            menu.Items.Add(miOpen);
+        }
+
+        var miCopy = new MenuItem { Header = "复制路径" };
+        miCopy.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(item.TargetPath); } catch { }
+        };
+        menu.Items.Add(miCopy);
+
+        menu.Items.Add(new Separator());
+
+        var miRemove = new MenuItem { Header = "从盒子移除" };
+        miRemove.Click += (_, _) => RemoveFromBox();
+        menu.Items.Add(miRemove);
+
+        return menu;
+    }
+
+    /// <summary>常见 Shell 动词 → 中文显示名;未命中的动词原样(首字母大写)显示。</summary>
+    private static readonly Dictionary<string, string> VerbDisplay = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["open"] = "打开",
+        ["edit"] = "编辑",
+        ["print"] = "打印",
+        ["printto"] = "打印到",
+        ["preview"] = "预览",
+        ["runas"] = "以管理员身份运行",
+        ["runasuser"] = "以其他用户身份运行",
+        ["explore"] = "资源管理器中浏览",
+        ["find"] = "查找",
+    };
+
+    private static string VerbDisplayName(string verb) =>
+        VerbDisplay.TryGetValue(verb, out var display)
+            ? display
+            : (char.ToUpperInvariant(verb[0]) + verb[1..].ToLowerInvariant());
+
+    private void OpenLocation()
+    {
+        if (Item is null) return;
+        try
+        {
+            var original = Item.TargetPath;
+            var target = original;
+            if (original.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            {
+                var resolved = Native.ShellLinkResolver.ResolveTarget(original);
+                target = !string.IsNullOrEmpty(resolved) ? resolved : original;
+                // 诊断:记录 .lnk 解析结果。若 resolved 为空=解析失败→回退打开 .lnk 所在(桌面)
+                App.LogError(new System.Exception($"lnk resolve: orig={original} | resolved={resolved ?? "(null)"} | use={target}"),
+                    target == original ? "OpenLocation.lnk-FAILED" : "OpenLocation.lnk-OK");
+            }
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex) { App.LogError(ex, "ItemTile.OpenLocation"); }
+    }
+
+    /// <summary>从盒子移除当前磁贴(不删文件本体)。</summary>
+    private void RemoveFromBox()
     {
         if (Item is null) return;
         if (Window.GetWindow(this) is not Views.MainWindow mw) return;
         if (mw.DataContext is not ViewModels.MainViewModel vm) return;
-
-        foreach (var box in vm.Boxes)
-        {
-            if (box.Items.Contains(Item))
-            {
-                vm.RemoveItem(box, Item);
-                break;
-            }
-        }
+        vm.RemoveItemAnywhere(Item);
     }
 }

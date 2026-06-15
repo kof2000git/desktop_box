@@ -10,9 +10,16 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>DesktopBox</AssemblyName>
     <RootNamespace>DesktopBox</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.5.0</Version>
     <AssemblyTitle>DesktopBox 桌面整理盒子</AssemblyTitle>
     <Company>DesktopBox</Company>
+    <!-- 绿色便携:全部塞进单个 exe,删掉周围文件也能独立运行。
+         IncludeNativeLibrariesForSelfExtract:把 .NET 运行时 + WPF/WinForms 的 native dll
+         (PresentationNative_cor3.dll / wpfgfx_cor3.dll / D3DCompiler 等)也打进 exe,
+         运行时解压到 %TEMP%\.net\。否则这些 dll 放在 exe 旁边,被删即启动崩溃(DllNotFoundException)。
+         EnableCompressionInSingleFile:压缩 bundle,体积从 ~155M 降到 ~75M(代价:首次启动多 1~2 秒解压)。 -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <!-- 同时启用 WPF 与 WinForms 会引入冲突的全局 using,这里移除,改在需要的文件里显式引入/限定 -->

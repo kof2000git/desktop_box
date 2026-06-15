@@ -5,22 +5,20 @@ using DesktopBox.Models;
 namespace DesktopBox.Services;
 
 /// <summary>
-/// 一键整理:只引用、不移动。文件始终留在桌面原处,盒子只记录路径引用。
-/// 这样其它写死桌面路径的程序/脚本不会因整理而失效。
+/// 桌面扫描 + 分类 + 整理盒子标识。引用模式:文件始终留在桌面原处,只记录路径引用。
+/// 增量整理:本服务只负责"扫描+分类"与"整理盒子 id 管理";"哪些是新文件"的判断
+/// 由 MainViewModel 对照整理盒子已有条目完成。
 /// </summary>
 public class OrganizeService : IOrganizeService
 {
-    private static readonly string AppData =
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-
     private readonly IDesktopScannerService _scanner;
     private readonly ICategorizerService _categorizer;
     private readonly string _manifestPath;
     private static readonly JsonSerializerOptions _opts = new(JsonSerializerDefaults.Web);
 
-    // 生产构造:清单固定到 %AppData%\DesktopBox\organize.json
+    // 生产构造:清单随程序走(便携,放可执行文件同目录)
     public OrganizeService(IDesktopScannerService scanner, ICategorizerService categorizer)
-        : this(scanner, categorizer, Path.Combine(AppData, "DesktopBox", "organize.json"))
+        : this(scanner, categorizer, AppPaths.OrganizePath)
     { }
 
     // 测试构造:可注入临时清单路径
@@ -34,53 +32,31 @@ public class OrganizeService : IOrganizeService
     public bool HasActiveOrganize => File.Exists(_manifestPath);
     public int CountOrganizable() => _scanner.ScanDesktop().Count;
 
-    public OrganizeResult? Organize()
+    public List<(string Path, string Category)> ScanAndCategorize()
     {
-        var paths = _scanner.ScanDesktop();
-        if (paths.Count == 0) return null;
-
-        var manifest = new OrganizeManifest { Timestamp = DateTime.Now };
-        var result = new OrganizeResult { Manifest = manifest };
-
-        foreach (var p in paths)
+        var result = new List<(string, string)>();
+        foreach (var p in _scanner.ScanDesktop())
         {
             if (Path.GetFileName(p).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
-            var cat = _categorizer.Categorize(p);
-            manifest.Moves.Add(new MoveRecord { OriginalPath = p, NewPath = p, Category = cat });
-            result.Entries.Add(new OrganizeEntry { Category = cat, DisplayName = DisplayName(p), CurrentPath = p });
+            result.Add((p, _categorizer.Categorize(p)));
         }
-
-        if (result.Entries.Count == 0) return null;
-        SaveManifest(manifest);
         return result;
     }
 
     public void RecordBoxIds(IEnumerable<Guid> boxIds)
     {
-        var manifest = LoadManifest();
-        if (manifest is null) return;
+        var manifest = LoadManifest() ?? new OrganizeManifest { Timestamp = DateTime.Now };
         manifest.BoxIds = boxIds.ToList();
         SaveManifest(manifest);
     }
 
-    public OrganizeResult? Restore()
+    public Guid? GetOrganizeBoxId()
     {
-        var manifest = LoadManifest();
-        if (manifest is null) return null;
-        // 引用模式:文件从未移动,无需移回。仅清除清单记录。
-        try { File.Delete(_manifestPath); } catch { }
-        return new OrganizeResult { Manifest = manifest };
+        var id = LoadManifest()?.BoxIds.FirstOrDefault();
+        return id is { } g && g != Guid.Empty ? g : null;
     }
 
     // ---- helpers ----
-    private static string DisplayName(string path)
-    {
-        var n = Path.GetFileName(path);
-        return n.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
-            ? Path.GetFileNameWithoutExtension(n)
-            : n;
-    }
-
     private void SaveManifest(OrganizeManifest m)
     {
         var dir = Path.GetDirectoryName(_manifestPath);

@@ -2,10 +2,17 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ctl="clr-namespace:DesktopBox.Controls"
+             xmlns:m="clr-namespace:DesktopBox.Models"
              AllowDrop="True"
              Drop="OnDrop"
              DragOver="OnDragOver"
              ContextMenuOpening="OnContextMenuOpening">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis"/>
+        <ctl:EnumEqualityToBoolConverter x:Key="ModeEqual"/>
+        <ctl:BoolToEyeStrokeConverter x:Key="BoolToEyeBrush"/>
+        <ctl:BoolToEyeFillConverter x:Key="BoolToEyeFill"/>
+    </UserControl.Resources>
     <Border x:Name="Card"
             Width="{Binding Width}"
             Height="{Binding Height}"
@@ -16,6 +23,7 @@
             ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
@@ -30,6 +38,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Rectangle Grid.Column="0" Width="10" Height="10" RadiusX="2" RadiusY="2" Fill="#4FC3F7" Margin="0,0,8,0"/>
                     <TextBlock Grid.Column="1"
@@ -39,42 +48,285 @@
                                Foreground="White"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
+                    <!-- 显示/隐藏桌面图标快捷按钮:眼睛图标,显示=亮色实心,隐藏=暗色空心 -->
+                    <Button Grid.Column="2"
+                            x:Name="ToggleIconsBtn"
+                            Click="OnToggleDesktopIcons"
+                            ToolTip="显示/隐藏桌面图标"
+                            Width="24" Height="24" Margin="6,0,0,0" Padding="0"
+                            Background="Transparent"
+                            BorderBrush="#66FFFFFF"
+                            Cursor="Hand"
+                            Tag="{Binding DataContext.DesktopIconsVisible, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}">
+                        <Path Width="16" Height="16" Stretch="Uniform"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                              StrokeThickness="1.6"
+                              Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Tag, Converter={StaticResource BoolToEyeBrush}}"
+                              Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Tag, Converter={StaticResource BoolToEyeFill}}"
+                              Data="M12,5C5,5 1,12 1,12C1,12 5,19 12,19C19,19 23,12 23,12C23,12 19,5 12,5 Z M12,9A3,3 0 1,0 12,15A3,3 0 1,0 12,9 Z"/>
+                    </Button>
                 </Grid>
             </Border>
 
-            <!-- 条目列表 -->
-            <ScrollViewer Grid.Row="1"
+            <!-- 标签行(仅标签模式可见) -->
+            <Grid Grid.Row="1"
+                  Visibility="{Binding IsTabbed, Converter={StaticResource BoolVis}}"
+                  Background="#33000000">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ListBox x:Name="TabList" Grid.Column="0"
+                         ItemsSource="{Binding Tabs}"
+                         SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Focusable="False"
+                         AllowDrop="True"
+                         PreviewMouseLeftButtonDown="OnTabListMouseDown"
+                         PreviewMouseMove="OnTabListMouseMove"
+                         DragOver="OnTabListDragOver"
+                         Drop="OnTabListDrop"
+                         ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="10,4"/>
+                            <Setter Property="Margin" Value="2,3"/>
+                            <Setter Property="Foreground" Value="#FFCCCCCC"/>
+                            <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" CornerRadius="6" Padding="{TemplateBinding Padding}" Background="Transparent">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#665599FF"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <Button Grid.Column="1" Content="+"
+                        Width="24" Height="22" Margin="2,3,8,3"
+                        FontSize="16" Padding="0"
+                        Click="OnAddTab" ToolTip="新建标签"/>
+            </Grid>
+
+            <!-- 条目列表(当前标签 / Items):按 ViewMode 切换布局 -->
+            <ScrollViewer Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
-                          Padding="6">
-                <ItemsControl ItemsSource="{Binding Items}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel ItemWidth="72" Orientation="Horizontal"/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <ctl:ItemTile/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                          Padding="4">
+                <Grid>
+                    <!-- 大图标:默认(大方块) -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsLarge, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel ItemWidth="100" Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Large"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 中等图标 -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsMedium, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel ItemWidth="84" Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Medium"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 小图标(横向流式,16px 图标 + 名称) -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsSmall, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Small"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 列表(纵向单列) -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsList, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Vertical"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Small"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 详细信息:名称/修改时间/大小 -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsDetail, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Vertical"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Detail"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 平铺(图标+名称,横向卡片) -->
+                    <ItemsControl ItemsSource="{Binding DisplayItems}"
+                                  Visibility="{Binding IsTile, Converter={StaticResource BoolVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate><ctl:ItemTile IconSize="Tile"/></DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
             </ScrollViewer>
 
-            <!-- 右下角缩放手柄 -->
-            <Thumb Grid.Row="1"
-                   HorizontalAlignment="Right"
-                   VerticalAlignment="Bottom"
-                   Width="14" Height="14"
-                   Cursor="SizeNWSE"
-                   DragDelta="OnResize"/>
+            <!-- 八方向缩放手柄:覆盖卡片边缘。中间透明区域 hit-test 穿透到下层,不影响交互。 -->
+            <Grid Grid.Row="0" Grid.RowSpan="3">
+                <Grid.Resources>
+                    <Style TargetType="Thumb">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Rectangle Fill="Transparent"/>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Grid.Resources>
+                <Thumb Tag="N"  HorizontalAlignment="Stretch" VerticalAlignment="Top"    Height="6"  Cursor="SizeNS"   DragDelta="OnResize"/>
+                <Thumb Tag="S"  HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="6"  Cursor="SizeNS"   DragDelta="OnResize"/>
+                <Thumb Tag="W"  VerticalAlignment="Stretch"   HorizontalAlignment="Left"  Width="6"  Cursor="SizeWE"   DragDelta="OnResize"/>
+                <Thumb Tag="E"  VerticalAlignment="Stretch"   HorizontalAlignment="Right" Width="6"  Cursor="SizeWE"   DragDelta="OnResize"/>
+                <Thumb Tag="NW" HorizontalAlignment="Left"  VerticalAlignment="Top"    Width="12" Height="12" Cursor="SizeNWSE" DragDelta="OnResize"/>
+                <Thumb Tag="NE" HorizontalAlignment="Right" VerticalAlignment="Top"    Width="12" Height="12" Cursor="SizeNESW" DragDelta="OnResize"/>
+                <Thumb Tag="SW" HorizontalAlignment="Left"  VerticalAlignment="Bottom" Width="12" Height="12" Cursor="SizeNESW" DragDelta="OnResize"/>
+                <Thumb Tag="SE" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="12" Height="12" Cursor="SizeNWSE" DragDelta="OnResize"/>
+            </Grid>
         </Grid>
     </Border>
 
     <UserControl.ContextMenu>
-        <ContextMenu>
+        <!-- ContextMenu 不在视觉树中,需显式绑定到 PlacementTarget(本控件)的 DataContext -->
+        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="查看">
+                <MenuItem Header="大图标" Click="OnViewLarge" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Large}, Mode=OneWay}"/>
+                <MenuItem Header="中等图标" Click="OnViewMedium" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Medium}, Mode=OneWay}"/>
+                <MenuItem Header="小图标" Click="OnViewSmall" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Small}, Mode=OneWay}"/>
+                <MenuItem Header="列表" Click="OnViewList" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.List}, Mode=OneWay}"/>
+                <MenuItem Header="详细信息" Click="OnViewDetail" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Detail}, Mode=OneWay}"/>
+                <MenuItem Header="平铺" Click="OnViewTile" IsCheckable="True"
+                          IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Tile}, Mode=OneWay}"/>
+            </MenuItem>
             <MenuItem Header="重命名盒子" Click="OnRename"/>
             <MenuItem Header="清空盒子" Click="OnClear"/>
+            <Separator/>
+            <!-- 仅标签模式 -->
+            <MenuItem Header="新建标签" Click="OnAddTab">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <MenuItem Header="重命名当前标签" Click="OnRenameTab">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <MenuItem Header="删除当前标签" Click="OnDeleteTab">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <!-- 仅普通模式 -->
+            <MenuItem Header="转为标签盒子" Click="OnConvertToTabbed">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <!-- 仅标签模式 -->
+            <MenuItem Header="合并其它盒子进来…" Click="OnMergeIn">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <MenuItem Header="拆分为独立盒子" Click="OnSplit">
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsTabbed}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
             <Separator/>
             <MenuItem Header="删除盒子" Click="OnDelete"/>
         </ContextMenu>

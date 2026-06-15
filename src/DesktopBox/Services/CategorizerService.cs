@@ -5,12 +5,13 @@ namespace DesktopBox.Services;
 
 public class CategorizerService : ICategorizerService
 {
-    public const string Program = "程序";
+    public const string Program = "应用程序";    // 原"程序",更明确
     public const string Document = "文档";
     public const string Image = "图片";
     public const string Archive = "压缩包";
     public const string Video = "视频";
-    public const string Music = "音乐";
+    public const string Audio = "音频";          // 原"音乐"
+    public const string Shortcut = "快捷方式";   // 新增独立类
     public const string FolderCat = "文件夹";
     public const string Other = "其他";
 
@@ -26,11 +27,11 @@ public class CategorizerService : ICategorizerService
     private static readonly HashSet<string> Vids = new()
     { ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".ts", ".m4v", ".rmvb", ".rm" };
 
-    private static readonly HashSet<string> Musc = new()
-    { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a" };
+    private static readonly HashSet<string> Auds = new()
+    { ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a", ".ape", ".mka", ".opus", ".aiff", ".mid", ".midi" };
 
     private static readonly HashSet<string> Apps = new()
-    { ".exe", ".msi", ".bat", ".cmd", ".ps1", ".appref-ms", ".scr" };
+    { ".exe", ".msi", ".bat", ".cmd", ".ps1", ".appref-ms", ".scr", ".appx", ".msix" };
 
     public string Categorize(string path)
     {
@@ -39,17 +40,13 @@ public class CategorizerService : ICategorizerService
             if (Directory.Exists(path)) return FolderCat;
 
             var ext = Path.GetExtension(path).ToLowerInvariant();
+            // 快捷方式独立成类:只有指向文件夹的快捷方式仍归「文件夹」,其余一律归「快捷方式」
             if (ext == ".lnk")
             {
                 var target = ResolveShortcut(path);
-                if (!string.IsNullOrEmpty(target))
-                {
-                    if (Directory.Exists(target)) return FolderCat;
-                    var te = Path.GetExtension(target).ToLowerInvariant();
-                    if (Apps.Contains(te)) return Program;
-                    return ByExt(te);
-                }
-                return Program; // 无法解析的快捷方式默认归「程序」
+                if (!string.IsNullOrEmpty(target) && Directory.Exists(target))
+                    return FolderCat;
+                return Shortcut;
             }
             if (Apps.Contains(ext)) return Program;
             return ByExt(ext);
@@ -66,7 +63,7 @@ public class CategorizerService : ICategorizerService
         if (Imgs.Contains(ext)) return Image;
         if (Arcs.Contains(ext)) return Archive;
         if (Vids.Contains(ext)) return Video;
-        if (Musc.Contains(ext)) return Music;
+        if (Auds.Contains(ext)) return Audio;
         return Other;
     }
 
