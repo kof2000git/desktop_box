@@ -37,6 +37,64 @@ public partial class MainWindow : Window
         SetupTray();
         // WinForms 托盘菜单不像 WPF DynamicResource 会自动刷新,语言切换后需手动重建菜单文本
         _localizer.LanguageChanged += (_, _) => RebuildTrayMenu();
+
+        // Win+D / "显示桌面" 的真实机制(已由日志证实):窗口本身完全正常(非最小化、可见),
+        // 只是桌面(Progman)被 shell 提到一个更高的 z-order band,把盒子盖在下面。
+        //   - HWND_TOP 提顶盖不过它(实测:提顶成功但盒子仍不可见);
+        //   - "TOPMOST 闪一下再降回"不稳定(降回那一步会被 shell 重新压到桌面之下)。
+        // 可靠解法:前台是桌面期间持续保持 TOPMOST(必然盖过桌面);前台切到别的窗口时降回
+        // NOTOPMOST(让位给用户的浏览器/文件夹,不长期遮挡)。这是桌面常驻工具的标准做法。
+        StateChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Minimized)
+                Dispatcher.BeginInvoke(new Action(() => WindowState = WindowState.Normal));
+        };
+
+        StartWinDCoverGuard();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _guard;
+    private bool _lastWasDesktop = false; // 上次前台是否为桌面,仅在切换时落一次日志,避免刷屏
+
+    private void StartWinDCoverGuard()
+    {
+        // DispatcherTimer:UI 线程触发 + 字段持有防 GC(System.Threading.Timer 局部变量会被回收导致停摆)
+        // 间隔尽量短:Win+D 后桌面盖住盒子的窗口期 ≈ 这个间隔,10ms 内肉眼完全察觉不到闪烁。
+        _guard = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        _guard.Tick += (_, _) =>
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd == IntPtr.Zero) return;
+
+                // 极少数情况下 Win+D 走真正的最小化:兜底恢复
+                if (Native.User32.IsIconic(hwnd))
+                    Native.User32.ShowWindow(hwnd, Native.User32.SW_RESTORE);
+
+                // 检测前台窗口类名判断是否为桌面(Progman / ApplicationManager_DesktopShellWindow)
+                var fg = Native.User32.GetForegroundWindow();
+                if (fg == IntPtr.Zero) return;
+                var sb = new System.Text.StringBuilder(256);
+                Native.User32.GetClassName(fg, sb, 256);
+                var cls = sb.ToString();
+                var isDesktop = cls.Contains("rogman", StringComparison.OrdinalIgnoreCase)
+                             || cls.Contains("esktopShell", StringComparison.OrdinalIgnoreCase);
+
+                const uint flags = Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_NOACTIVATE;
+                if (isDesktop)
+                {
+                    Native.User32.SetWindowPos(hwnd, Native.User32.HWND_TOPMOST, 0, 0, 0, 0, flags);
+                }
+                else if (_lastWasDesktop)
+                {
+                    Native.User32.SetWindowPos(hwnd, Native.User32.HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+                }
+                _lastWasDesktop = isDesktop;
+            }
+            catch { }
+        };
+        _guard.Start();
     }
 
     private void SetupTray()
