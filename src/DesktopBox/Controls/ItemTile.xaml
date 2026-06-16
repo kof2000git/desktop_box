@@ -4,8 +4,7 @@
              xmlns:m="clr-namespace:DesktopBox.Models"
              MouseDoubleClick="OnDoubleClick"
              PreviewMouseRightButtonUp="OnPreviewMouseRightButtonUp"
-             ToolTip="{Binding TargetPath}"
-             Cursor="Hand">
+             ToolTip="{Binding TargetPath}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>
     </UserControl.Resources>

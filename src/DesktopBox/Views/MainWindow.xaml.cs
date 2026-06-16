@@ -53,6 +53,31 @@ public partial class MainWindow : Window
         StartWinDCoverGuard();
     }
 
+    // 系统图标自动刷新:窗口句柄就绪后注册接收 shell 变化通知(回收站空/满切换等),
+    // 并挂 HwndSource hook 拦截通知消息转发给 ShellChangeNotifierService。
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            var src = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
+            if (src is null) return;
+            var notifier = App.Services.GetRequiredService<IShellChangeNotifierService>();
+            src.AddHook((IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (notifier.NotifyMessageId != 0 && (uint)msg == notifier.NotifyMessageId)
+                {
+                    notifier.OnShellNotify(wParam, lParam);
+                    handled = true;
+                }
+                return IntPtr.Zero;
+            });
+            notifier.Register(hwnd);
+        }
+        catch (Exception ex) { App.LogError(ex, "MainWindow.ShellChangeNotify"); }
+    }
+
     private System.Windows.Threading.DispatcherTimer? _guard;
     private bool _lastWasDesktop = false; // 上次前台是否为桌面,仅在切换时落一次日志,避免刷屏
 

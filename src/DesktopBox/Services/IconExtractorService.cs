@@ -13,7 +13,10 @@ public class IconExtractorService : IIconExtractorService
 {
     private static readonly string CacheDir = AppPaths.IconCacheDir;
 
-    public string? Extract(string targetPath)
+    public string? Extract(string targetPath) => Extract(targetPath, forceRefresh: false);
+
+    /// <param name="forceRefresh">true 时删除系统图标的旧缓存,重新提取当前状态(回收站空/满切换后用)。</param>
+    public string? Extract(string targetPath, bool forceRefresh)
     {
         try
         {
@@ -21,7 +24,7 @@ public class IconExtractorService : IIconExtractorService
             Directory.CreateDirectory(CacheDir);
 
             // 系统图标(Shell 虚拟项,如 ::{645FF040-...})用 PIDL 方式
-            if (targetPath.StartsWith("::")) return ExtractSystemIcon(targetPath);
+            if (targetPath.StartsWith("::")) return ExtractSystemIcon(targetPath, forceRefresh);
 
             if (targetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -48,11 +51,24 @@ public class IconExtractorService : IIconExtractorService
         }
     }
 
-    private string? ExtractSystemIcon(string clsidPath)
+    private string? ExtractSystemIcon(string clsidPath, bool forceRefresh = false)
     {
         var key = ("sys|" + clsidPath).GetHashCode(StringComparison.Ordinal).ToString("x");
         var png = Path.Combine(CacheDir, key + ".png");
-        if (File.Exists(png)) return png;
+        // 系统图标(回收站空/满、此电脑盘符)的状态会变化,但缓存 key 不含时间戳,
+        // 默认命中缓存即返回旧图。forceRefresh=true 时删旧缓存强制重新提取当前状态。
+        if (forceRefresh)
+        {
+            // 删掉这个 key 的所有旧缓存(基础名 + 历次时间戳名),避免累积
+            try { foreach (var f in Directory.GetFiles(CacheDir, key + "*.png")) File.Delete(f); } catch { }
+        }
+        if (File.Exists(png) && !forceRefresh) return png;
+
+        // forceRefresh 路径:重新提取后用带时间戳的文件名返回,确保 IconCachePath 值变化——
+        // 否则 png 文件内容变了但路径不变,WPF Image 会复用缓存的 BitmapImage 不重绘(回收站图标不更新)。
+        var stamp = DateTime.UtcNow.Ticks;
+        var pngRefresh = forceRefresh ? Path.Combine(CacheDir, key + "_" + stamp + ".png") : png;
+        var target = forceRefresh ? pngRefresh : png;
 
         // SHGetImageList 返回系统图像列表的 COM 接口,必须在 STA 单元调用。
         // 本方法由 Task.Run 线程池调用,线程池是 MTA 且无法用 CoInitializeEx(STA) 重初始化
@@ -62,7 +78,7 @@ public class IconExtractorService : IIconExtractorService
         Exception? error = null;
         var t = new Thread(() =>
         {
-            try { result = ExtractSystemIconCore(clsidPath, png); }
+            try { result = ExtractSystemIconCore(clsidPath, target); }
             catch (Exception ex) { error = ex; }
         }) { IsBackground = true };
         t.SetApartmentState(ApartmentState.STA);

@@ -148,6 +148,7 @@ public partial class App : Application
         s.AddSingleton<IOrganizeService, OrganizeService>();
         s.AddSingleton<ILocalizerService, LocalizerService>();
         s.AddSingleton<IDesktopIconsService, DesktopIconsService>();
+        s.AddSingleton<IShellChangeNotifierService, ShellChangeNotifierService>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();
         s.AddSingleton<MainWindow>();

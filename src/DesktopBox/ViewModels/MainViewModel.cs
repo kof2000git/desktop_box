@@ -64,7 +64,8 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(IPersistenceService store, IDropParserService parser,
                          IIconExtractorService icon, IOrganizeService organize,
-                         IDesktopIconsService desktopIcons, ILocalizerService localizer)
+                         IDesktopIconsService desktopIcons, ILocalizerService localizer,
+                         IShellChangeNotifierService shellChange)
     {
         _store = store;
         _parser = parser;
@@ -74,6 +75,8 @@ public partial class MainViewModel : ObservableObject
         _localizer = localizer;
         // 语言切换后刷新所有程序生成盒子/标签的显示名(Header)
         _localizer.LanguageChanged += (_, _) => RefreshAllHeaders();
+        // 系统图标自动刷新:回收站清空/还原、此电脑盘符变化等 shell 通知 → 重新提取受影响图标
+        shellChange.SystemIconChanged += (_, _) => RefreshSystemIcons();
     }
 
     [RelayCommand]
@@ -452,6 +455,39 @@ public partial class MainViewModel : ObservableObject
     }
 
     private void ExtractIconAsync(BoxItem item) => ExtractIconsInBackground(new List<BoxItem> { item });
+
+    /// <summary>收到 shell 变化通知(回收站清空/还原、系统图标列表更新等)后,
+    /// 重新提取所有系统图标(回收站空/满、此电脑盘符等状态会变)。forceRefresh=true 强制删旧缓存。</summary>
+    private void RefreshSystemIcons()
+    {
+        // 跨所有盒子 + 标签收集系统图标(TargetPath 以 :: 开头)
+        var sysItems = new List<BoxItem>();
+        foreach (var b in Boxes)
+        {
+            var src = b.IsTabbed ? b.Tabs.SelectMany(t => t.Items) : b.Items;
+            foreach (var it in src)
+            {
+                if (it.TargetPath.StartsWith("::", StringComparison.Ordinal))
+                    sysItems.Add(it);
+            }
+        }
+        if (sysItems.Count == 0) return;
+
+        Task.Run(() =>
+        {
+            foreach (var it in sysItems)
+            {
+                try
+                {
+                    var icon = _icon.Extract(it.TargetPath, forceRefresh: true);
+                    var disp = Application.Current?.Dispatcher;
+                    if (disp is null || disp.HasShutdownStarted) continue;
+                    disp.BeginInvoke(new Action(() => it.IconCachePath = icon));
+                }
+                catch (Exception ex) { App.LogError(ex, "RefreshSystemIcons.Extract"); }
+            }
+        });
+    }
 
     /// <summary>为详细信息视图惰性填充每个条目的大小/修改时间(后台线程,逐个回 UI 更新)。</summary>
     public void EnsureDetailFields(BoxViewModel box)

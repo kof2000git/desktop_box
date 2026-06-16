@@ -79,6 +79,10 @@ public static class User32
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
 
+    /// <summary>注册一个全局唯一的窗口消息号(用于 shell 变化通知等自定义消息)。</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern uint RegisterWindowMessage(string lpString);
+
     public const uint WM_SPAWN_WORKERW = 0x052C;
 
     public static IntPtr GetProgman() => FindWindow("Progman", null);
