@@ -100,6 +100,11 @@ if ($p.HasExited) { throw "exe 启动后立即退出,ExitCode=$($p.ExitCode)" }
 Stop-Process -Id $p.Id -Force
 Write-Host "    exe 运行正常 (PID $($p.Id))" -ForegroundColor DarkGray
 
+# 冒烟启动会在 exe 旁生成运行时数据；发布包只应包含程序文件。
+foreach ($runtimeJunk in 'icons', 'logs', 'boxes.json', 'organize.json') {
+    Remove-Item -Recurse -Force (Join-Path $repoRoot "publish/$runtimeJunk") -ErrorAction SilentlyContinue
+}
+
 # ---------- 5. 打包 ----------
 Write-Host "`n==> [5/5] 打包 zip..." -ForegroundColor Green
 $releaseDir = Join-Path $repoRoot 'release'

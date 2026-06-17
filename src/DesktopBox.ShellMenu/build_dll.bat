@@ -28,12 +28,17 @@ set "REPO=%CD%"
 popd
 
 if not exist "%REPO%\publish" mkdir "%REPO%\publish"
+set "INTDIR=%REPO%\publish\.native-build"
+if not exist "%INTDIR%" mkdir "%INTDIR%"
 
 cl /nologo /LD /O2 /EHsc /std:c++17 /utf-8 ^
   "%SCRIPTDIR%DesktopBox.ShellMenu.cpp" ^
+  /Fo:"%INTDIR%\DesktopBox.ShellMenu.obj" ^
   /Fe:"%REPO%\publish\DesktopBox.ShellMenu.dll" ^
-  /link ole32.lib shell32.lib user32.lib gdi32.lib
+  /link ole32.lib shell32.lib user32.lib gdi32.lib ^
+  /IMPLIB:"%INTDIR%\DesktopBox.ShellMenu.lib"
 
 set "CL_EXIT=%ERRORLEVEL%"
 echo CL_EXIT=%CL_EXIT%
+if "%CL_EXIT%"=="0" if exist "%INTDIR%" rmdir /s /q "%INTDIR%"
 endlocal & exit /b %CL_EXIT%

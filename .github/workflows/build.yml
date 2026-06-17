@@ -24,11 +24,16 @@ jobs:
       - name: Test
         run: dotnet test DesktopBox.sln -c Release
 
-      # 自包含分散发布(exe + 运行时 DLL):与本地构建一致。
-      # 不用单文件——单文件 exe 会把 .NET bundle 解压到 %TEMP%,DllImport 加载旁边的
-      # 原生 ShellMenu.dll 时搜索路径不可靠,首次右键磁贴会 DllNotFoundException。
-      - name: Publish .NET app (self-contained)
-        run: dotnet publish src/DesktopBox/DesktopBox.csproj -c Release -r win-x64 --self-contained true -o publish
+      # 自包含单文件发布:与 release.ps1 保持一致。
+      # 产物只保留 DesktopBox.exe + 原生 ShellMenu.dll,避免发布包里出现大量 .NET 运行时 DLL。
+      - name: Publish .NET app (single-file self-contained)
+        run: >
+          dotnet publish src/DesktopBox/DesktopBox.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish
 
       # 原生 C++ 右键菜单宿主:用 build_dll.bat(vswhere 定位 MSVC → cl 编译),
       # 输出 DesktopBox.ShellMenu.dll 到 publish/。
@@ -36,10 +41,10 @@ jobs:
         shell: cmd
         run: src\DesktopBox.ShellMenu\build_dll.bat
 
-      # 打包整个 publish 目录(exe + 所有运行时 DLL + ShellMenu.dll),解压即用
+      # 打包单文件 exe + ShellMenu.dll,解压即用
       - name: Package zip
         shell: pwsh
-        run: Compress-Archive -Path publish/* -DestinationPath DesktopBox.zip
+        run: Compress-Archive -Path publish/DesktopBox.exe,publish/DesktopBox.ShellMenu.dll -DestinationPath DesktopBox.zip
 
       # 每次构建都上传 artifact(非 tag 时供下载测试,7 天过期)
       - name: Upload artifact
