@@ -12,8 +12,20 @@
     <!-- 统一 Grid 容器:行列定义由 ApplyLayout 按 TileSize 动态切换。
          横向模式用列定义做表格对齐(图标 | 名称* | 修改时间 | 大小),名称用 * 列填满可用空间,
          不再靠固定 MaxWidth 截断——有空间就显示全名,真正放不下才 TextTrimming 省略。
-         详细信息模式的修改时间/大小用固定列宽,保证每行对齐。 -->
-    <Border x:Name="Root" Padding="3">
+         详细信息模式的修改时间/大小用固定列宽,保证每行对齐。
+         Root 背景/边框绑定 IsSelected:选中时半透明蓝色高亮(资源管理器风格)。 -->
+    <Border x:Name="Root" Padding="3" CornerRadius="6" Background="Transparent">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                        <Setter Property="Background" Value="#665599FF"/>
+                        <Setter Property="BorderBrush" Value="#CC88BBFF"/>
+                        <Setter Property="BorderThickness" Value="1.5"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <Grid x:Name="LayoutGrid">
             <!-- 图标区 -->
             <Grid x:Name="IconBox" Width="44" Height="44" HorizontalAlignment="Center">

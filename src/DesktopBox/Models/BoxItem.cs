@@ -13,6 +13,9 @@ public partial class BoxItem : ObservableObject
 
     [ObservableProperty] private string? _iconCachePath;
 
+    /// <summary>是否被选中(单选/Ctrl多选)。选中时磁贴显示半透明蓝色高亮(资源管理器风格)。</summary>
+    [ObservableProperty] private bool _isSelected;
+
     /// <summary>详细信息视图用:文件大小(文件夹为空,显示"—")。惰性填充,可观察。</summary>
     [ObservableProperty] private string? _sizeText;
     /// <summary>详细信息视图用:最后修改时间。惰性填充,可观察。</summary>

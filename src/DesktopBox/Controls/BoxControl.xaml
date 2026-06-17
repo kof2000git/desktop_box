@@ -136,8 +136,10 @@
             <ScrollViewer Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
+                          Background="Transparent"
+                          PreviewMouseLeftButtonDown="OnItemsAreaMouseDown"
                           Padding="4">
-                <Grid>
+                <Grid Background="Transparent">
                     <!-- 大图标:默认(大方块) -->
                     <ItemsControl ItemsSource="{Binding DisplayItems}"
                                   Visibility="{Binding IsLarge, Converter={StaticResource BoolVis}}">
@@ -251,6 +253,7 @@
                           IsChecked="{Binding ViewMode, Converter={StaticResource ModeEqual}, ConverterParameter={x:Static m:ViewMode.Tile}, Mode=OneWay}"/>
             </MenuItem>
             <MenuItem Header="{DynamicResource box.menu.rename}" Click="OnRename"/>
+            <MenuItem Header="{DynamicResource box.menu.removeSelected}" Click="OnRemoveSelected"/>
             <MenuItem Header="{DynamicResource box.menu.clear}" Click="OnClear"/>
             <Separator/>
             <!-- 仅标签模式 -->

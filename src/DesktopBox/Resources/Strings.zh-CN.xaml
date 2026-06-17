@@ -32,6 +32,7 @@
 
     <!-- 盒子右键菜单 -->
     <s:String x:Key="box.menu.rename">重命名盒子</s:String>
+    <s:String x:Key="box.menu.removeSelected">从盒子移除选中项</s:String>
     <s:String x:Key="box.menu.clear">清空盒子</s:String>
     <s:String x:Key="box.menu.newTab">新建标签</s:String>
     <s:String x:Key="box.menu.renameTab">重命名当前标签</s:String>
@@ -81,6 +82,7 @@
     <s:String x:Key="dialog.renameBox.title">重命名盒子</s:String>
     <s:String x:Key="dialog.renameBox.prompt">请输入新的盒子名称：</s:String>
     <s:String x:Key="dialog.clearBox.confirm">确定清空此盒子的所有条目吗?&#x0a;(只是从盒子里移除显示,文件不会被删除)</s:String>
+    <s:String x:Key="dialog.removeSelected.confirm">确定从盒子移除选中的 {0} 个项目吗?&#x0a;(文件不会被删除,只是从盒子里移除显示)</s:String>
     <s:String x:Key="dialog.deleteBox.nonEmpty">盒子「{0}」里还有 {1} 个项目,为防止误以为文件丢失,不允许直接删除非空盒子。&#x0a;&#x0a;如确实要删除:&#x0a;• 先点「清空盒子」移除里面的条目(文件仍在原处,不会被删),再删盒子&#x0a;• 或把不需要的图标逐个删除&#x0a;&#x0a;如果是一键整理生成的标签盒子、想恢复桌面,请用「还原整理」。</s:String>
     <s:String x:Key="dialog.deleteBox.empty">确定删除空盒子「{0}」吗?</s:String>
     <s:String x:Key="dialog.deleteTab.nonEmpty">标签「{0}」里还有 {1} 个项目,不能直接删除。&#x0a;请先清空该标签(把图标移到其它标签或逐个删除)。</s:String>

@@ -38,6 +38,16 @@ public partial class ItemTile : UserControl
             SetFallback();
             ApplyLayout();
         };
+        // 单击选中(普通=单选,Ctrl=多选)。不拦截双击打开(OnDoubleClick 仍触发)。
+        PreviewMouseLeftButtonDown += OnTileMouseDown;
+    }
+
+    private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Item is null) return;
+        if (Window.GetWindow(this) is not Views.MainWindow mw) return;
+        if (mw.DataContext is not ViewModels.MainViewModel vm) return;
+        vm.HandleTileClick(Item, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
     }
 
     private void SetFallback()
@@ -225,6 +235,17 @@ public partial class ItemTile : UserControl
     private void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (Item is null) return;
+
+        // 多选批量场景:若当前处于多选(>1)且右键的是已选中项,不弹单文件 shell 菜单,
+        // 让事件冒泡到 BoxControl 的 ContextMenu(含"从盒子移除选中项"等批量操作)。
+        // 资源管理器也是这种行为:多选后右键弹的是批量菜单,而非单文件 verb 菜单。
+        if (Item.IsSelected)
+        {
+            if (Window.GetWindow(this) is not Views.MainWindow mw) return;
+            if (mw.DataContext is not ViewModels.MainViewModel vm) return;
+            if (vm.GetSelectedItems().Count > 1) return;   // 放行 → 冒泡到 BoxControl 菜单
+        }
+
         e.Handled = true;
         var pt = PointToScreen(new Point(0, ActualHeight));
         int result = 0;

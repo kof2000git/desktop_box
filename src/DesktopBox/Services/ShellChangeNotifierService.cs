@@ -5,38 +5,50 @@ using DesktopBox.Native;
 namespace DesktopBox.Services;
 
 /// <summary>基于 SHChangeNotifyRegister 的 shell 变化通知监听。
-/// 监听广泛事件(文件创建/删除/重命名/更新/系统图标更新/关联变化),收到任意通知即视为
-/// 可能需要刷新系统图标(回收站空满切换实际发的是 CREATE/RENAME/UPDATE 等事件,而非 UPDATEIMAGE)。
-/// 用节流合并短时间内的多次通知,避免频繁删除/拷贝导致图标反复重提。</summary>
+/// 注册桌面目录的 PIDL(收窄到桌面,避免 C:\Windows 等系统目录的索引/杀毒/同步事件刷屏),
+/// 监听文件级事件(增删改)与图标层信号(图标列表/关联变化)。收到后按事件类型分流到两个事件,
+/// 各自独立节流(400ms 合并),避免频繁删除/拷贝导致反复刷新。</summary>
 public class ShellChangeNotifierService : IShellChangeNotifierService
 {
     private uint _notifyId;
     private bool _registered;
-    private Timer? _throttle;
-    private volatile bool _pending;
+    private IntPtr _desktopPidl = IntPtr.Zero;
+
+    // 图标层与文件层各自独立的节流队列,互不干扰
+    private Timer? _iconThrottle;
+    private Timer? _fileThrottle;
+    private volatile bool _iconPending;
+    private volatile bool _filePending;
 
     public uint NotifyMessageId { get; } = User32.RegisterWindowMessage("DesktopBox_ShellNotify_v1");
 
     public event EventHandler? SystemIconChanged;
+    public event EventHandler? DesktopFilesChanged;
 
     public bool Register(IntPtr hwnd)
     {
         if (_registered) return true;
         if (hwnd == IntPtr.Zero) return false;
 
-        // 监听广泛事件:回收站空/满走 CREATE/RENAME/DELETE/UPDATE;关联变化、系统图标更新也覆盖
-        const uint events =
-            Shell32.SHCNE_RENAMEITEM   |   // 0x001 重命名
-            Shell32.SHCNE_CREATE       |   // 0x002 创建(文件进回收站)
-            Shell32.SHCNE_DELETE       |   // 0x004 删除(回收站清空)
-            Shell32.SHCNE_UPDATEITEM   |   // 0x800 项目更新
-            Shell32.SHCNE_UPDATEDIR    |   // 0x1000 目录更新(回收站内容变)
-            Shell32.SHCNE_UPDATEIMAGE  |   // 0x8000 系统图标列表更新
-            Shell32.SHCNE_ASSOCCHANGED;    // 0x08000000 关联变化
+        // 文件级事件:用于清理盒子中已失效的条目(用户在资源管理器删桌面文件后盒子同步)。
+        // 图标层事件:用于刷新系统图标(回收站空满、此电脑盘符变化、关联变化)。
+        const uint fileEvents = Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE | Shell32.SHCNE_RENAMEITEM
+                              | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_RMDIR | Shell32.SHCNE_RENAMEFOLDER;
+        const uint iconEvents = Shell32.SHCNE_UPDATEIMAGE | Shell32.SHCNE_ASSOCCHANGED;
+        const uint events = fileEvents | iconEvents;
         const uint sources = Shell32.SHCNRF_ShellLevel | Shell32.SHCNRF_InterruptLevel | Shell32.SHCNRF_NewDelivery;
 
-        var entries = new[] { new Shell32.SHChangeNotifyEntry { pidl = IntPtr.Zero, fRecursive = true } };
-        _notifyId = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, 1, ref entries);
+        // 桌面目录 PIDL:只收桌面(含子目录)的变化,过滤掉系统后台对其他目录的扫描噪声。
+        // 解析失败时退化为零 PIDL(全局)——仍能收到事件,只是范围更大。
+        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (!string.IsNullOrEmpty(desktopPath))
+            Shell32.SHParseDisplayName(desktopPath, IntPtr.Zero, out _desktopPidl, 0, out _);
+
+        var entries = new Shell32.SHChangeNotifyEntry[]
+        {
+            new() { pidl = _desktopPidl, fRecursive = true }
+        };
+        _notifyId = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, entries.Length, ref entries);
         _registered = _notifyId != 0;
         if (!_registered)
             App.LogError(new Exception(
@@ -49,11 +61,11 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
     {
         try
         {
-            // 解析事件类型(NewDelivery 模式 Lock;lParam 直接是事件标志时兜底)。
-            // 这里不再按事件类型过滤——回收站空/满实际发的是 CREATE/DELETE/UPDATE 等通用事件,
-            // 监听到任意 shell 变化就标记需要刷新系统图标,由节流统一触发。
+            // NewDelivery 模式:Lock 解析 lParam 携带的 PIDL 列表并输出实际事件标志。
+            // dwProcId 传 wParam(注册ID);Lock 对该参数不严格校验,0 亦可,但传 wParam 更规范。
             uint events;
-            var lockHandle = Shell32.SHChangeNotification_Lock(lParam, 0, out var count, out events);
+            var lockHandle = Shell32.SHChangeNotification_Lock(lParam, (uint)(wParam.ToInt64() & 0xFFFFFFFFu),
+                out var count, out events);
             if (lockHandle != IntPtr.Zero)
             {
                 try { }
@@ -61,39 +73,82 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
             }
             else
             {
+                // 兜底:无 NewDelivery 句柄时,lParam 直接是事件标志。
                 events = (uint)(long)lParam;
             }
 
-            // 节流:短时间内可能连发多个通知(回收站清空连发 CREATE/DELETE/UPDATE),
-            // 用 400ms 延迟合并为一次刷新。必须在 UI 线程触发事件(订阅者访问 UI 集合)。
-            if (!_pending)
-            {
-                _pending = true;
-                if (_throttle is null)
-                {
-                    _throttle = new Timer(_ => ThrottledFire(), null, 400, Timeout.Infinite);
-                }
-                else
-                {
-                    // 单次 Timer(dueTime=400,period=Infinite)复用时必须重新 Change 才会再次触发,
-                    // 否则第二次之后的通知永远不刷新(回收站清空图标不更新的根因)
-                    _throttle.Change(400, Timeout.Infinite);
-                }
-            }
+            // 分流:图标层信号 → 刷系统图标;文件级变化 → 清盒子失效项。
+            const uint fileMask = Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE | Shell32.SHCNE_RENAMEITEM
+                                | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_RMDIR | Shell32.SHCNE_RENAMEFOLDER;
+            if ((events & (Shell32.SHCNE_UPDATEIMAGE | Shell32.SHCNE_ASSOCCHANGED)) != 0)
+                ScheduleFire(isIcon: true);
+            if ((events & fileMask) != 0)
+                ScheduleFire(isIcon: false);
         }
         catch (Exception ex) { App.LogError(ex, "ShellChangeNotifier.OnShellNotify"); }
     }
 
-    private void ThrottledFire()
+    /// <summary>节流合并:短时间内可能连发多个通知(回收站清空连发 CREATE/DELETE/UPDATE),
+    /// 用 400ms 延迟合并为一次回调。单次 Timer(period=Infinite)复用时必须重新 Change 才会再次触发。</summary>
+    private void ScheduleFire(bool isIcon)
     {
-        _pending = false;
+        if (isIcon)
+        {
+            if (_iconPending) return;
+            _iconPending = true;
+            if (_iconThrottle is null)
+                _iconThrottle = new Timer(_ => FireSystemIconChanged(), null, 400, Timeout.Infinite);
+            else
+                _iconThrottle.Change(400, Timeout.Infinite);
+        }
+        else
+        {
+            if (_filePending) return;
+            _filePending = true;
+            if (_fileThrottle is null)
+                _fileThrottle = new Timer(_ => FireDesktopFilesChanged(), null, 400, Timeout.Infinite);
+            else
+                _fileThrottle.Change(400, Timeout.Infinite);
+        }
+    }
+
+    private void FireSystemIconChanged()
+    {
+        _iconPending = false;
+        InvokeOnDispatcher(SystemIconChanged);
+    }
+
+    private void FireDesktopFilesChanged()
+    {
+        _filePending = false;
+        InvokeOnDispatcher(DesktopFilesChanged);
+    }
+
+    /// <summary>在 UI 线程触发事件(订阅者访问 UI 集合)。</summary>
+    private void InvokeOnDispatcher(EventHandler? handler)
+    {
+        if (handler is null) return;
         var disp = System.Windows.Application.Current?.Dispatcher;
         if (disp is null || disp.HasShutdownStarted)
         {
-            SystemIconChanged?.Invoke(this, EventArgs.Empty);
+            handler.Invoke(this, EventArgs.Empty);
             return;
         }
-        disp.BeginInvoke(new Action(() => SystemIconChanged?.Invoke(this, EventArgs.Empty)));
+        disp.BeginInvoke(new Action(() => handler.Invoke(this, EventArgs.Empty)));
+    }
+
+    /// <summary>在 UI 线程触发事件(订阅者访问 UI 集合)。复位 pending 标志。</summary>
+    private void InvokeOnDispatcher(EventHandler? handler, ref bool pending)
+    {
+        pending = false;
+        if (handler is null) return;
+        var disp = System.Windows.Application.Current?.Dispatcher;
+        if (disp is null || disp.HasShutdownStarted)
+        {
+            handler.Invoke(this, EventArgs.Empty);
+            return;
+        }
+        disp.BeginInvoke(new Action(() => handler.Invoke(this, EventArgs.Empty)));
     }
 
     ~ShellChangeNotifierService()
@@ -102,6 +157,11 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
         {
             try { Shell32.SHChangeNotifyDeregister(_notifyId); } catch { }
         }
-        _throttle?.Dispose();
+        if (_desktopPidl != IntPtr.Zero)
+        {
+            try { Shell32.ILFree(_desktopPidl); } catch { }
+        }
+        _iconThrottle?.Dispose();
+        _fileThrottle?.Dispose();
     }
 }

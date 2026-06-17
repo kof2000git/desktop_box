@@ -77,6 +77,26 @@ public partial class MainViewModel : ObservableObject
         _localizer.LanguageChanged += (_, _) => RefreshAllHeaders();
         // 系统图标自动刷新:回收站清空/还原、此电脑盘符变化等 shell 通知 → 重新提取受影响图标
         shellChange.SystemIconChanged += (_, _) => RefreshSystemIcons();
+        // 桌面文件变化:用户在资源管理器删/移桌面文件后,盒子中对应项需同步移除,否则点击失效项报错。
+        shellChange.DesktopFilesChanged += (_, _) => PruneStaleItems();
+    }
+
+    /// <summary>清理所有盒子(含标签)中"目标已不存在"的条目。用户在资源管理器删桌面文件后触发。
+    /// 只移除本地文件类条目(系统图标/URL 不检查,它们有自己的有效性逻辑)。</summary>
+    private void PruneStaleItems()
+    {
+        // 先收集要移除的项(不在遍历中修改集合)
+        var stale = new List<BoxItem>();
+        foreach (var it in AllItems())
+        {
+            if (it.Type == ItemType.SystemIcon || it.Type == ItemType.Url) continue;
+            if (it.TargetPath.StartsWith("::", StringComparison.Ordinal)) continue;
+            if (it.TargetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!File.Exists(it.TargetPath) && !Directory.Exists(it.TargetPath))
+                stale.Add(it);
+        }
+        if (stale.Count == 0) return;
+        foreach (var it in stale) RemoveItemAnywhere(it);
     }
 
     [RelayCommand]
@@ -184,6 +204,60 @@ public partial class MainViewModel : ObservableObject
             foreach (var t in box.Tabs)
                 if (t.Items.Remove(item)) { ScheduleSave(); return; }
         }
+    }
+
+    // ---- 选中态 + 批量操作(跨盒子):所有 BoxItem.IsSelected 汇总 ----
+
+    /// <summary>遍历所有盒子(含标签)的条目。选中操作/批量操作用。</summary>
+    public IEnumerable<BoxItem> AllItems()
+    {
+        foreach (var box in Boxes)
+        {
+            foreach (var it in box.Items) yield return it;
+            foreach (var t in box.Tabs)
+                foreach (var it in t.Items) yield return it;
+        }
+    }
+
+    /// <summary>清除所有选中(点空白/单选新项时调用)。</summary>
+    public void ClearSelection()
+    {
+        foreach (var it in AllItems())
+            if (it.IsSelected) it.IsSelected = false;
+    }
+
+    /// <summary>处理单个磁贴点击的选中逻辑:普通点击=单选(清其它、选当前),Ctrl=切换(多选)。</summary>
+    public void HandleTileClick(BoxItem clicked, bool ctrl)
+    {
+        if (ctrl)
+        {
+            clicked.IsSelected = !clicked.IsSelected;
+            return;
+        }
+        // 普通点击:若已有多选,只保留当前;否则正常单选
+        var selected = GetSelectedItems();
+        if (selected.Count > 1 || (selected.Count == 1 && selected[0] != clicked))
+        {
+            ClearSelection();
+            clicked.IsSelected = true;
+        }
+        else
+        {
+            // 当前是唯一选中或都没选:切换
+            clicked.IsSelected = !clicked.IsSelected;
+        }
+    }
+
+    /// <summary>获取所有选中的条目。</summary>
+    public List<BoxItem> GetSelectedItems() => AllItems().Where(i => i.IsSelected).ToList();
+
+    /// <summary>批量从盒子移除选中的条目(不删文件本体,同单项移除语义)。</summary>
+    public void RemoveSelected()
+    {
+        var selected = GetSelectedItems();
+        if (selected.Count == 0) return;
+        foreach (var it in selected) RemoveItemAnywhere(it);
+        ScheduleSave();
     }
 
     // ---- 一键整理(增量):只把桌面新文件分类并入「桌面整理」标签盒子 ----

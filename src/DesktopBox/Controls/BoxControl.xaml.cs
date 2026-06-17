@@ -159,6 +159,25 @@ public partial class BoxControl : UserControl
 
     private void OnContextMenuOpening(object sender, ContextMenuEventArgs e) { /* 预留 */ }
 
+    /// <summary>点击条目列表的空白区域(非磁贴)→ 清除所有选中(资源管理器行为)。
+    /// Preview 隧道事件:点磁贴时也会触发,需排除命中 ItemTile 的情况,否则 Ctrl 多选会被先清空。</summary>
+    private void OnItemsAreaMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // 命中测试:若点中的是 ItemTile(或其子元素),不处理,交给磁贴自己的选中逻辑
+        if (e.OriginalSource is DependencyObject d && FindAncestor<ItemTile>(d) is not null) return;
+        MainVm.ClearSelection();
+    }
+
+    private static T? FindAncestor<T>(DependencyObject d) where T : DependencyObject
+    {
+        while (d is not null)
+        {
+            if (d is T t) return t;
+            d = System.Windows.Media.VisualTreeHelper.GetParent(d);
+        }
+        return null;
+    }
+
     private void OnRename(object sender, RoutedEventArgs e)
     {
         if (Vm is null) return;
@@ -175,6 +194,15 @@ public partial class BoxControl : UserControl
             Vm.ClearAll();
             MainVm.ScheduleSave();
         }
+    }
+
+    /// <summary>批量删除当前所有选中的磁贴(跨盒子)。由右键选中项冒泡到此 ContextMenu 触发。</summary>
+    private void OnRemoveSelected(object sender, RoutedEventArgs e)
+    {
+        var selected = MainVm.GetSelectedItems();
+        if (selected.Count == 0) return;
+        if (!InputDialog.Confirm(string.Format(Localizer["dialog.removeSelected.confirm"], selected.Count))) return;
+        MainVm.RemoveSelected();
     }
 
     private void OnDelete(object sender, RoutedEventArgs e)
