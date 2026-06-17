@@ -152,7 +152,7 @@ public partial class MainWindow : Window
 
     private void ShowBoxes()
     {
-        Show();
+        if (!IsVisible) Show();
         Activate();
     }
 
@@ -184,6 +184,8 @@ public partial class MainWindow : Window
 
     private void OnQuit(object? sender, RoutedEventArgs? e)
     {
+        App.BeginShutdown();
+        try { _vm.Save(); } catch { }
         _tray?.Dispose();
         _tray = null;
         Application.Current.Shutdown();
@@ -191,10 +193,11 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        if (_tray is { Visible: true })
+        if (_tray is { Visible: true } && !App.IsShuttingDown)
         {
             e.Cancel = true;
             Hide();
+            return;
         }
         base.OnClosing(e);
     }

@@ -249,8 +249,24 @@ public partial class ItemTile : UserControl
         e.Handled = true;
         var pt = PointToScreen(new Point(0, ActualHeight));
         int result = 0;
-        try { result = ShowShellMenu(Item.TargetPath, (int)pt.X, (int)pt.Y); }
-        catch (Exception ex) { App.LogError(ex, "ItemTile.ShowShellMenu"); }
+        bool fallback = Item.Type == ItemType.Url;
+        if (!fallback)
+        {
+            try { result = ShowShellMenu(Item.TargetPath, (int)pt.X, (int)pt.Y); }
+            catch (Exception ex)
+            {
+                App.LogError(ex, "ItemTile.ShowShellMenu");
+                fallback = true;
+            }
+        }
+        if (fallback)
+        {
+            var menu = BuildContextMenu();
+            menu.PlacementTarget = this;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+            return;
+        }
         if (result == 0x7000) { RemoveFromBox(); return; }
 
         // 原生菜单可能执行了"删除/剪切/重命名"等命令,使目标路径失效。延一帧校验刷新。

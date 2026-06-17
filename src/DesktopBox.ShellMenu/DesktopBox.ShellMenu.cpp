@@ -1,4 +1,4 @@
-// DesktopBox.ShellMenu.cpp (含诊断日志,定位"网络"等项为何无菜单)
+// DesktopBox.ShellMenu.cpp
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shlobj.h>
@@ -15,8 +15,8 @@ static const wchar_t* kMenuWndClass = L"DesktopBox_ShellMenuHook_4F8A";
 static IContextMenu3* g_cm3 = nullptr;
 static IContextMenu2* g_cm2 = nullptr;
 
-// 诊断日志:写到 exe 同目录 logs/shellmenu.log
 static void DbgLog(const char* step, long hr = 0) {
+#ifdef DESKTOPBOX_SHELLMENU_DIAG
     wchar_t exePath[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     std::wstring dir = exePath;
@@ -28,6 +28,10 @@ static void DbgLog(const char* step, long hr = 0) {
         fprintf(f, "[%s] hr=0x%lX\n", step, (unsigned long)hr);
         fclose(f);
     }
+#else
+    (void)step;
+    (void)hr;
+#endif
 }
 
 static LRESULT CALLBACK MenuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

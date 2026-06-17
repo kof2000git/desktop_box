@@ -34,5 +34,6 @@ cl /nologo /LD /O2 /EHsc /std:c++17 /utf-8 ^
   /Fe:"%REPO%\publish\DesktopBox.ShellMenu.dll" ^
   /link ole32.lib shell32.lib user32.lib gdi32.lib
 
-echo CL_EXIT=%ERRORLEVEL%
-endlocal
+set "CL_EXIT=%ERRORLEVEL%"
+echo CL_EXIT=%CL_EXIT%
+endlocal & exit /b %CL_EXIT%

@@ -707,13 +707,38 @@ public partial class MainViewModel : ObservableObject
         _debounce?.Dispose();
         _debounce = new Timer(_ =>
         {
-            try { Save(); }
+            try
+            {
+                var disp = Application.Current?.Dispatcher;
+                if (disp is null || disp.HasShutdownStarted)
+                {
+                    Save();
+                    return;
+                }
+                disp.BeginInvoke(new Action(() =>
+                {
+                    try { Save(); }
+                    catch { /* 落盘失败不崩 */ }
+                }));
+            }
             catch { /* 落盘失败不崩 */ }
         }, null, 300, Timeout.Infinite);
     }
 
     public void Save()
     {
+        var disp = Application.Current?.Dispatcher;
+        if (disp is not null && !disp.CheckAccess())
+        {
+            if (disp.HasShutdownStarted) return;
+            try
+            {
+                disp.Invoke(new Action(Save));
+            }
+            catch { /* 落盘失败不应影响使用 */ }
+            return;
+        }
+
         try
         {
             var existing = _store.Load();

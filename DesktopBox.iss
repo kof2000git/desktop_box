@@ -3,8 +3,8 @@
 
 [Setup]
 AppName=DesktopBox
-AppVersion=1.5.0
-AppVerName=DesktopBox 1.5.0
+AppVersion=1.6.2
+AppVerName=DesktopBox 1.6.2
 AppPublisher=DesktopBox
 DefaultDirName={localappdata}\Programs\DesktopBox
 DefaultGroupName=DesktopBox
@@ -31,6 +31,7 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "A
 
 [Files]
 Source: "publish\DesktopBox.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish\DesktopBox.ShellMenu.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\DesktopBox"; Filename: "{app}\DesktopBox.exe"

@@ -61,7 +61,7 @@
 | 👁️ | **隐藏/显示桌面图标** — 一键清空桌面真实图标(纯视觉,不动文件)。 |
 | 🖥️ | **系统图标盒子** — 此电脑/回收站/控制面板/网络,用**真实系统图标**。 |
 | 🖱️ | **原生右键菜单** — 真正的 Windows 右键菜单(打开/属性/发送到/…),由配套 C++ DLL 提供。 |
-| ♻️ | **绿色便携** — 单个 ~71MB 的 exe。配置与图标缓存放**exe 同目录**;删到只剩 exe 也能运行并自动重建。 |
+| ♻️ | **绿色便携** — 单个 ~71MB 的 exe。默认把配置与图标缓存放在**exe 同目录**;若目录不可写,会自动退到 `%LocalAppData%\\DesktopBox`。 |
 | 🔒 | **零联网、零遥测** — 永不联网。 |
 
 ---
@@ -226,7 +226,7 @@ src/
 
 - **Desktop-layer window** — The main window reparents to the `WorkerW` desktop layer so it sits beneath browser windows yet above the desktop wallpaper (won't steal focus, won't block other apps). Falls back to a normal non-topmost window if reparenting fails.
 - **Reference-only organize** — Tidying never calls `File.Move`; boxes store paths. Zero risk of "lost files".
-- **Portable data** — All config (`boxes.json`, `organize.json`) and icon cache live next to the exe via `AppContext.BaseDirectory`. Truly green/portable.
+- **Portable data** — Config (`boxes.json`, `organize.json`) and icon cache prefer the exe directory; if it is read-only (for example under Program Files), DesktopBox falls back to `%LocalAppData%\DesktopBox`.
 - **Service-layer interfaces + unit tests** — Core logic (categorize, organize, persistence) is fully testable; Native/UI layers are manually verified.
 
 **Tech stack · 技术栈:** .NET 8 · WPF · [WPF-UI](https://github.com/lepoco/wpfui) · CommunityToolkit.Mvvm · WinForms interop · C++/Win32 (shell menu)
@@ -240,16 +240,16 @@ src/
 只把文件**路径**存进盒子,文件原地不动。
 
 **Q: Where is my data? / 我的数据在哪?**
-Next to the exe: `boxes.json` (box layout), `organize.json` (tidy manifest), `icons/` (icon cache, auto-rebuilt), `logs/` (error log).
-在 exe 同目录:`boxes.json`(盒子布局)、`organize.json`(整理清单)、`icons/`(图标缓存,可重建)、`logs/`(错误日志)。
+Preferably next to the exe: `boxes.json` (box layout), `organize.json` (tidy manifest), `icons/` (icon cache), `logs/` (error log). If the exe folder is not writable, DesktopBox falls back to `%LocalAppData%\DesktopBox`.
+优先在 exe 同目录:`boxes.json`(盒子布局)、`organize.json`(整理清单)、`icons/`(图标缓存)、`logs/`(错误日志);若目录不可写,会自动退到 `%LocalAppData%\DesktopBox`。
 
 **Q: Back up? / 怎么备份?**
 Copy `boxes.json`. That's it.
 复制 `boxes.json` 即可。
 
 **Q: I deleted everything except the exe — will it still run? / 只剩 exe 还能运行吗?**
-**Yes. / 能。** It regenerates config, icon cache and logs automatically next to the exe.
-会自动在 exe 旁重建配置、图标缓存和日志。
+**Yes. / 能。** It regenerates config, icon cache and logs automatically. Usually they go next to the exe; on read-only folders they go under `%LocalAppData%\DesktopBox`.
+会自动重建配置、图标缓存和日志;通常放在 exe 旁,若目录只读则放到 `%LocalAppData%\DesktopBox`。
 
 **Q: Does it send any data online? / 会联网上传数据吗?**
 **Never. / 绝不。** No telemetry, no network calls of any kind.

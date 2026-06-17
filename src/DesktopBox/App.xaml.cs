@@ -14,12 +14,15 @@ namespace DesktopBox;
 public partial class App : Application
 {
     private static Mutex? _mutex;
+    public static bool IsShuttingDown { get; private set; }
 
     /// <summary>全局 DI 容器,供控件/窗口解析服务。</summary>
     public static IServiceProvider Services { get; private set; } = default!;
 
     /// <summary>程序版本号(用于显示,便于确认运行的是哪个构建)。</summary>
     public static string Version { get; } = (typeof(App).Assembly.GetName().Version?.ToString(3)) ?? "1.0";
+
+    public static void BeginShutdown() => IsShuttingDown = true;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -82,20 +85,27 @@ public partial class App : Application
     {
         try
         {
-            var legacyDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DesktopBox");
-            if (!Directory.Exists(legacyDir)) return;
+            var legacyDirs = new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DesktopBox"),
+                AppContext.BaseDirectory
+            };
 
-            foreach (var (legacy, current) in new (string, string)[]
+            foreach (var legacyDir in legacyDirs.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                (Path.Combine(legacyDir, "boxes.json"),    Models.AppPaths.ConfigPath),
-                (Path.Combine(legacyDir, "organize.json"), Models.AppPaths.OrganizePath),
-            })
-            {
-                if (!File.Exists(legacy) || File.Exists(current)) continue;
-                var dir = Path.GetDirectoryName(current);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.Copy(legacy, current);
+                if (!Directory.Exists(legacyDir)) continue;
+
+                foreach (var (legacy, current) in new (string, string)[]
+                {
+                    (Path.Combine(legacyDir, "boxes.json"),    Models.AppPaths.ConfigPath),
+                    (Path.Combine(legacyDir, "organize.json"), Models.AppPaths.OrganizePath),
+                })
+                {
+                    if (!File.Exists(legacy) || File.Exists(current)) continue;
+                    var dir = Path.GetDirectoryName(current);
+                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                    File.Copy(legacy, current);
+                }
             }
         }
         catch { /* 迁移失败不影响启动 */ }

@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using DesktopBox.Models;
 using DesktopBox.Native;
@@ -30,7 +32,7 @@ public class IconExtractorService : IIconExtractorService
 
             var stamp = "0";
             try { if (File.Exists(targetPath) || Directory.Exists(targetPath)) stamp = File.GetLastWriteTimeUtc(targetPath).Ticks.ToString(); } catch { }
-            var key = (targetPath.ToLowerInvariant() + "|" + stamp).GetHashCode(StringComparison.Ordinal).ToString("x");
+            var key = StableKey(targetPath.ToLowerInvariant() + "|" + stamp);
             var png = Path.Combine(CacheDir, key + ".png");
             if (File.Exists(png)) return png;
 
@@ -39,10 +41,16 @@ public class IconExtractorService : IIconExtractorService
             Shell32.SHGetFileInfo(targetPath, 0, ref info, size, Shell32.SHGFI_ICON | Shell32.SHGFI_LARGEICON);
             if (info.hIcon == IntPtr.Zero) return null;
 
-            using var icon = Icon.FromHandle(info.hIcon);
-            using var bmp = icon.ToBitmap();
-            bmp.Save(png, ImageFormat.Png);
-            User32.DestroyIcon(info.hIcon);
+            try
+            {
+                using var icon = Icon.FromHandle(info.hIcon);
+                using var bmp = icon.ToBitmap();
+                bmp.Save(png, ImageFormat.Png);
+            }
+            finally
+            {
+                User32.DestroyIcon(info.hIcon);
+            }
             return png;
         }
         catch
@@ -53,7 +61,7 @@ public class IconExtractorService : IIconExtractorService
 
     private string? ExtractSystemIcon(string clsidPath, bool forceRefresh = false)
     {
-        var key = ("sys|" + clsidPath).GetHashCode(StringComparison.Ordinal).ToString("x");
+        var key = StableKey("sys|" + clsidPath);
         var png = Path.Combine(CacheDir, key + ".png");
         // 系统图标(回收站空/满、此电脑盘符)的状态会变化,但缓存 key 不含时间戳,
         // 默认命中缓存即返回旧图。forceRefresh=true 时删旧缓存强制重新提取当前状态。
@@ -102,7 +110,6 @@ public class IconExtractorService : IIconExtractorService
             var size = (uint)Marshal.SizeOf<Shell32.SHFILEINFO>();
             Shell32.SHGetFileInfoByPidl(pidl, 0, ref info, size,
                 Shell32.SHGFI_PIDL | Shell32.SHGFI_ICON | Shell32.SHGFI_LARGEICON);
-            App.LogError(new Exception($"sysicon clsid={clsidPath} hIcon={(long)info.hIcon} iIcon={info.iIcon}"), "ExtractSystemIcon.HICON");
             if (info.hIcon == IntPtr.Zero) return null;
             try
             {
@@ -114,5 +121,11 @@ public class IconExtractorService : IIconExtractorService
             finally { User32.DestroyIcon(info.hIcon); }
         }
         finally { Shell32.ILFree(pidl); }
+    }
+
+    private static string StableKey(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes, 0, 12).ToLowerInvariant();
     }
 }

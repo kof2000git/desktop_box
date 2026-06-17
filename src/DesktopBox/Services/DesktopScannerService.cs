@@ -15,10 +15,17 @@ public class DesktopScannerService : IDesktopScannerService
 
         foreach (var d in dirs.Distinct().Where(Directory.Exists))
         {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(d))
+            try
             {
-                if (Path.GetFileName(entry).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
-                result.Add(entry);
+                foreach (var entry in Directory.EnumerateFileSystemEntries(d))
+                {
+                    if (Path.GetFileName(entry).Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
+                    result.Add(entry);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.LogError(ex, "DesktopScanner.ScanDesktop");
             }
         }
         return result;

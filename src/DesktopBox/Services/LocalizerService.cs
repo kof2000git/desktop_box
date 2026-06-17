@@ -44,11 +44,6 @@ public class LocalizerService : ILocalizerService
             Source = new Uri($"pack://application:,,,/Resources/Strings.{CurrentLanguage}.xaml")
         });
 
-        // 诊断:确认检测/解析正确(阶段3 收尾后可移除)
-        App.LogError(new Exception(
-            $"Localizer applied: setting={Setting} resolved={CurrentLanguage} systemUI={CultureInfo.CurrentUICulture.Name}"),
-            "LocalizerService.Apply");
-
         LanguageChanged?.Invoke(this, EventArgs.Empty);
     }
 

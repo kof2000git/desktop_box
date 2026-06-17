@@ -21,6 +21,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Test
+        run: dotnet test DesktopBox.sln -c Release
+
       # 自包含分散发布(exe + 运行时 DLL):与本地构建一致。
       # 不用单文件——单文件 exe 会把 .NET bundle 解压到 %TEMP%,DllImport 加载旁边的
       # 原生 ShellMenu.dll 时搜索路径不可靠,首次右键磁贴会 DllNotFoundException。
