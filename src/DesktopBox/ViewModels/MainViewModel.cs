@@ -20,6 +20,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IDropParserService _parser;
     private readonly IIconExtractorService _icon;
     private readonly IOrganizeService _organize;
+    private readonly ICategorizerService _categorizer;
     private readonly IDesktopIconsService _desktopIcons;
     private readonly ILocalizerService _localizer;
     private Timer? _debounce;
@@ -64,6 +65,7 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(IPersistenceService store, IDropParserService parser,
                          IIconExtractorService icon, IOrganizeService organize,
+                         ICategorizerService categorizer,
                          IDesktopIconsService desktopIcons, ILocalizerService localizer,
                          IShellChangeNotifierService shellChange)
     {
@@ -71,6 +73,7 @@ public partial class MainViewModel : ObservableObject
         _parser = parser;
         _icon = icon;
         _organize = organize;
+        _categorizer = categorizer;
         _desktopIcons = desktopIcons;
         _localizer = localizer;
         // 语言切换后刷新所有程序生成盒子/标签的显示名(Header)
@@ -251,13 +254,35 @@ public partial class MainViewModel : ObservableObject
     /// <summary>获取所有选中的条目。</summary>
     public List<BoxItem> GetSelectedItems() => AllItems().Where(i => i.IsSelected).ToList();
 
-    /// <summary>批量从盒子移除选中的条目(不删文件本体,同单项移除语义)。</summary>
+    /// <summary>批量从盒子移除选中的条目(不删文件本体)。
+    /// 按 TargetPath 全删:同一文件可能在盒子多个标签里有重复条目(历史整理遗留),
+    /// 只移除选中那条会留下幽灵条目,导致整理时该文件不被当成新文件而无法回来。</summary>
     public void RemoveSelected()
     {
         var selected = GetSelectedItems();
         if (selected.Count == 0) return;
-        foreach (var it in selected) RemoveItemAnywhere(it);
+        var paths = selected.Select(i => i.TargetPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        RemoveItemsByPath(paths);
         ScheduleSave();
+    }
+
+    /// <summary>移除盒子中 TargetPath 命中 paths 的所有条目(跨盒子、跨标签)。</summary>
+    private void RemoveItemsByPath(HashSet<string> paths)
+    {
+        foreach (var box in Boxes)
+        {
+            RemoveMatching(box.Items, paths);
+            foreach (var t in box.Tabs) RemoveMatching(t.Items, paths);
+        }
+    }
+
+    private static void RemoveMatching(System.Collections.Generic.IList<BoxItem> items, HashSet<string> paths)
+    {
+        for (int i = items.Count - 1; i >= 0; i--)
+        {
+            if (paths.Contains(items[i].TargetPath))
+                items.RemoveAt(i);
+        }
     }
 
     // ---- 一键整理(增量):只把桌面新文件分类并入「桌面整理」标签盒子 ----
@@ -275,6 +300,15 @@ public partial class MainViewModel : ObservableObject
             AddBoxSynced(box = new BoxViewModel(new Box { Key = "box.organize", Name = _localizer["box.organize"], Width = 300, Height = 380, X = 40, Y = 40 }));
         _organize.RecordBoxIds(new[] { box.Id });   // 始终刷新,确保 manifest 指向当前整理盒子
 
+        // 去重:整理盒子历史可能存在同一文件的重复条目(旧版整理逻辑/多次手动拖入),
+        // 导致移除一条后该文件仍"存在"于盒子另一标签,整理时无法重新收录("移除后只回来部分")。
+        // 整理前按 TargetPath 跨标签去重,每个文件只保留首次出现的条目。
+        DedupOrganizeBox(box);
+
+        // 重新归类:分类规则变化(如新增 .py 归文档)后,历史条目可能停在错误的标签。
+        // 按当前 Categorizer 规则把每个文件移到正确标签,避免"改了分类旧文件还留在其他标签"。
+        ReclassifyOrganizeBox(box);
+
         // 增量:扫描 → 排除已在整理盒子里的 → 分类并入对应标签
         var scanned = _organize.ScanAndCategorize();
         var existing = new HashSet<string>(
@@ -283,9 +317,11 @@ public partial class MainViewModel : ObservableObject
         var newEntries = scanned.Where(s => !existing.Contains(s.Path)).ToList();
 
         var allItems = new List<BoxItem>();
+        BoxTab? firstChangedTab = null;   // 第一个收到新文件的标签:整理后切到它,让用户立即看到结果
         foreach (var g in newEntries.GroupBy(e => e.Category).OrderBy(g => CategoryOrder(g.Key)))
         {
             var tab = box.Tabs.FirstOrDefault(t => t.Key == g.Key) ?? NewTab(box, g.Key);
+            firstChangedTab ??= tab;
             foreach (var it in g.OrderBy(e => System.IO.Path.GetFileName(e.Path)))
             {
                 var item = _parser.ParsePath(it.Path);
@@ -300,7 +336,8 @@ public partial class MainViewModel : ObservableObject
         // 系统图标标签(首次或缺失时补上,放最后)
         bool sysAdded = EnsureSystemIconsTab(box, allItems);
 
-        box.SelectedTab = box.Tabs.FirstOrDefault();
+        // 切到第一个有新文件的标签;无新增时保持首个标签。避免新增文件在其它标签而用户以为"没回来"。
+        box.SelectedTab = firstChangedTab ?? box.Tabs.FirstOrDefault();
         Save();
         if (allItems.Count > 0) ExtractIconsInBackground(allItems);
 
@@ -365,6 +402,56 @@ public partial class MainViewModel : ObservableObject
         var n = System.IO.Path.GetFileName(path);
         return n.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
             ? System.IO.Path.GetFileNameWithoutExtension(n) : n;
+    }
+
+    /// <summary>整理盒子按 TargetPath 跨标签去重:同一文件只保留首次出现的条目。
+    /// 系统图标(以 :: 开头)按 TargetPath 也唯一化。修复历史重复条目导致"移除后整理只回来部分"。</summary>
+    private static void DedupOrganizeBox(BoxViewModel box)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int removed = 0;
+        foreach (var t in box.Tabs)
+        {
+            for (int i = t.Items.Count - 1; i >= 0; i--)
+            {
+                var path = t.Items[i].TargetPath;
+                if (!seen.Add(path))
+                {
+                    t.Items.RemoveAt(i);
+                    removed++;
+                }
+            }
+        }
+        if (removed > 0)
+            App.LogError(new Exception($"DedupOrganizeBox removed {removed} duplicate item(s)"), "Organize.dedup");
+    }
+
+    /// <summary>按当前分类规则重新归类整理盒子的历史条目。
+    /// 分类规则会演进(如新增 .py 归文档),旧条目按当时规则分到了某标签,改规则后不会自动迁移。
+    /// 整理时检测"条目当前标签 != 当前分类结果",把不符的移到正确标签。系统图标不动(无扩展名分类)。</summary>
+    private void ReclassifyOrganizeBox(BoxViewModel box)
+    {
+        var moves = new List<(BoxItem item, BoxTab from, string catKey)>();
+        foreach (var t in box.Tabs)
+        {
+            foreach (var it in t.Items)
+            {
+                if (it.Type == ItemType.SystemIcon) continue;
+                if (it.TargetPath.StartsWith("::", StringComparison.Ordinal)) continue;
+                var catKey = _categorizer.Categorize(it.TargetPath);
+                if (!string.Equals(catKey, t.Key, StringComparison.Ordinal))
+                    moves.Add((it, t, catKey));
+            }
+        }
+        foreach (var (item, from, catKey) in moves)
+        {
+            from.Items.Remove(item);
+            var to = box.Tabs.FirstOrDefault(t => t.Key == catKey) ?? NewTab(box, catKey);
+            item.Order = to.Items.Count;
+            to.Items.Add(item);
+        }
+        if (moves.Count > 0)
+            App.LogError(new Exception($"ReclassifyOrganizeBox moved {moves.Count} item(s)"), "Organize.reclassify");
     }
 
     private static int CategoryOrder(string c)

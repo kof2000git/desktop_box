@@ -12,7 +12,6 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
 {
     private uint _notifyId;
     private bool _registered;
-    private IntPtr _desktopPidl = IntPtr.Zero;
 
     // 图标层与文件层各自独立的节流队列,互不干扰
     private Timer? _iconThrottle;
@@ -38,15 +37,12 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
         const uint events = fileEvents | iconEvents;
         const uint sources = Shell32.SHCNRF_ShellLevel | Shell32.SHCNRF_InterruptLevel | Shell32.SHCNRF_NewDelivery;
 
-        // 桌面目录 PIDL:只收桌面(含子目录)的变化,过滤掉系统后台对其他目录的扫描噪声。
-        // 解析失败时退化为零 PIDL(全局)——仍能收到事件,只是范围更大。
-        var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        if (!string.IsNullOrEmpty(desktopPath))
-            Shell32.SHParseDisplayName(desktopPath, IntPtr.Zero, out _desktopPidl, 0, out _);
-
+        // 全局监听(pidl=Zero):收窄到桌面 PIDL 时收不到任何消息(非标准桌面路径解析问题),
+        // 用全局 + 事件类型过滤 + 节流来控制噪声。系统后台对其他目录的 CREATE/DELETE 会被收到,
+        // 但 PruneStaleItems 只检查盒子里文件是否存在,无变化的文件不会被误删。
         var entries = new Shell32.SHChangeNotifyEntry[]
         {
-            new() { pidl = _desktopPidl, fRecursive = true }
+            new() { pidl = IntPtr.Zero, fRecursive = true }
         };
         _notifyId = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, entries.Length, ref entries);
         _registered = _notifyId != 0;
@@ -62,10 +58,10 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
         try
         {
             // NewDelivery 模式:Lock 解析 lParam 携带的 PIDL 列表并输出实际事件标志。
-            // dwProcId 传 wParam(注册ID);Lock 对该参数不严格校验,0 亦可,但传 wParam 更规范。
+            // dwProcId 按 MSDN 必须传 0(unused)——曾误传 wParam 导致 events 解析为 0,
+            // 所有分流失效、DesktopFilesChanged 永不触发。
             uint events;
-            var lockHandle = Shell32.SHChangeNotification_Lock(lParam, (uint)(wParam.ToInt64() & 0xFFFFFFFFu),
-                out var count, out events);
+            var lockHandle = Shell32.SHChangeNotification_Lock(lParam, 0, out var count, out events);
             if (lockHandle != IntPtr.Zero)
             {
                 try { }
@@ -156,10 +152,6 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
         if (_registered && _notifyId != 0)
         {
             try { Shell32.SHChangeNotifyDeregister(_notifyId); } catch { }
-        }
-        if (_desktopPidl != IntPtr.Zero)
-        {
-            try { Shell32.ILFree(_desktopPidl); } catch { }
         }
         _iconThrottle?.Dispose();
         _fileThrottle?.Dispose();

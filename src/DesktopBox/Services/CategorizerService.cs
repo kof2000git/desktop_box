@@ -33,7 +33,15 @@ public class CategorizerService : ICategorizerService
     };
 
     private static readonly HashSet<string> Docs = new()
-    { ".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".rtf", ".md", ".wps", ".et", ".dps", ".odt", ".ods", ".odp" };
+    { ".doc", ".docx", ".pdf", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".rtf", ".md", ".wps", ".et", ".dps", ".odt", ".ods", ".odp",
+      // 代码/脚本/标记/配置文件:归「文档」。开发者桌面常见,否则会落到「其他」标签找不到。
+      ".py", ".pyw", ".js", ".mjs", ".ts", ".jsx", ".tsx", ".java", ".jar", ".class",
+      ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".cs", ".go", ".rs", ".rb", ".php",
+      ".swift", ".kt", ".kts", ".scala", ".sh", ".bash", ".zsh", ".lua", ".pl", ".pm",
+      ".r", ".m", ".mm", ".dart", ".vue", ".svelte",
+      ".html", ".htm", ".css", ".scss", ".sass", ".less",
+      ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
+      ".sql", ".graphql", ".proto" };
 
     private static readonly HashSet<string> Imgs = new()
     { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif", ".svg", ".heic" };

@@ -85,7 +85,22 @@ public static class User32
 
     public const uint WM_SPAWN_WORKERW = 0x052C;
 
-    public static IntPtr GetProgman() => FindWindow("Progman", null);
+    public static IntPtr GetProgman()
+    {
+        var h = FindWindow("Progman", null);
+        if (h != IntPtr.Zero) return h;
+        // 兜底:部分 Win11 环境 FindWindow("Progman") 返回0但窗口实际存在(实测 10.0.26200),
+        // 用 EnumWindows 按类名查找绕过。否则 GetWorkerW 链路第一步就断,导致 reparent 失败。
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((topHwnd, _) =>
+        {
+            var sb = new System.Text.StringBuilder(256);
+            GetClassName(topHwnd, sb, 256);
+            if (sb.ToString() == "Progman") { found = topHwnd; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
 
     public static IntPtr GetWorkerW()
     {
