@@ -14,14 +14,18 @@
          不再靠固定 MaxWidth 截断——有空间就显示全名,真正放不下才 TextTrimming 省略。
          详细信息模式的修改时间/大小用固定列宽,保证每行对齐。
          Root 背景/边框绑定 IsSelected:选中时半透明蓝色高亮(资源管理器风格)。 -->
-    <Border x:Name="Root" Padding="3" CornerRadius="6" Background="Transparent">
+    <Border x:Name="Root"
+            Padding="3"
+            CornerRadius="6">
         <Border.Style>
             <Style TargetType="Border">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="1.5"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
                         <Setter Property="Background" Value="#665599FF"/>
                         <Setter Property="BorderBrush" Value="#CC88BBFF"/>
-                        <Setter Property="BorderThickness" Value="1.5"/>
                     </DataTrigger>
                 </Style.Triggers>
             </Style>
@@ -41,6 +45,8 @@
             <!-- 名称 -->
             <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
                        Foreground="#FFEEEEEE" FontSize="11"
+                       LineStackingStrategy="BlockLineHeight" LineHeight="16"
+                       Padding="0,0,0,2"
                        TextAlignment="Center" TextTrimming="CharacterEllipsis"
                        TextWrapping="NoWrap" Margin="0,3,0,0"/>
             <!-- 修改时间(详细信息/平铺可见) -->

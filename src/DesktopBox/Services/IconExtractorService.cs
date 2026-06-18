@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
 using DesktopBox.Models;
 using DesktopBox.Native;
 
@@ -82,18 +81,15 @@ public class IconExtractorService : IIconExtractorService
         // 本方法由 Task.Run 线程池调用,线程池是 MTA 且无法用 CoInitializeEx(STA) 重初始化
         // (RPC_E_CHANGED_MODE),MTA 下 SHGetImageList 直接返回 E_NOINTERFACE → 图标提取全失败。
         // 解决:起一个专用 STA 线程跑提取,阻塞等待结果(CLR 会自动为它初始化 STA)。
-        string? result = null;
-        Exception? error = null;
-        var t = new Thread(() =>
+        try
         {
-            try { result = ExtractSystemIconCore(clsidPath, target); }
-            catch (Exception ex) { error = ex; }
-        }) { IsBackground = true };
-        t.SetApartmentState(ApartmentState.STA);
-        t.Start();
-        t.Join();
-        if (error != null) App.LogError(error, "ExtractSystemIcon.STA");
-        return result;
+            return StaTaskRunner.RunSync(() => ExtractSystemIconCore(clsidPath, target));
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex, "ExtractSystemIcon.STA");
+            return null;
+        }
     }
 
     /// <summary>在 STA 线程上执行真正的图标提取。用 SHGFI_ICON 直接拿 hIcon(不走 COM 系统图像列表——

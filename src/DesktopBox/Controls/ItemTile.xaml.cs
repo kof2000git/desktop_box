@@ -15,6 +15,8 @@ namespace DesktopBox.Controls;
 
 public partial class ItemTile : UserControl
 {
+    private static readonly SemaphoreSlim ShellMenuGate = new(1, 1);
+
     /// <summary>磁贴渲染尺寸/布局(由盒子 ViewMode 决定)。变化时重排内部元素。</summary>
     public static readonly DependencyProperty IconSizeProperty =
         DependencyProperty.Register(nameof(IconSize), typeof(TileSize), typeof(ItemTile),
@@ -232,14 +234,15 @@ public partial class ItemTile : UserControl
     [DllImport("DesktopBox.ShellMenu.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int ShowShellMenu(string path, int screenX, int screenY);
 
-    private void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    private async void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (Item is null) return;
+        var item = Item;
+        if (item is null) return;
 
         // 多选批量场景:若当前处于多选(>1)且右键的是已选中项,不弹单文件 shell 菜单,
         // 让事件冒泡到 BoxControl 的 ContextMenu(含"从盒子移除选中项"等批量操作)。
         // 资源管理器也是这种行为:多选后右键弹的是批量菜单,而非单文件 verb 菜单。
-        if (Item.IsSelected)
+        if (item.IsSelected)
         {
             if (Window.GetWindow(this) is not Views.MainWindow mw) return;
             if (mw.DataContext is not ViewModels.MainViewModel vm) return;
@@ -247,34 +250,48 @@ public partial class ItemTile : UserControl
         }
 
         e.Handled = true;
-        var pt = PointToScreen(new Point(0, ActualHeight));
-        int result = 0;
-        bool fallback = Item.Type == ItemType.Url;
-        if (!fallback)
-        {
-            try { result = ShowShellMenu(Item.TargetPath, (int)pt.X, (int)pt.Y); }
-            catch (Exception ex)
-            {
-                App.LogError(ex, "ItemTile.ShowShellMenu");
-                fallback = true;
-            }
-        }
-        if (fallback)
-        {
-            var menu = BuildContextMenu();
-            menu.PlacementTarget = this;
-            menu.Placement = PlacementMode.Bottom;
-            menu.IsOpen = true;
+        if (!await ShellMenuGate.WaitAsync(0))
             return;
-        }
-        if (result == 0x7000) { RemoveFromBox(); return; }
 
-        // 原生菜单可能执行了"删除/剪切/重命名"等命令,使目标路径失效。延一帧校验刷新。
-        Dispatcher.BeginInvoke(new Action(() =>
+        var pt = PointToScreen(new Point(0, ActualHeight));
+        try
         {
-            if (Item is not null && IsLocalPathItem(Item) && !TargetExists(Item.TargetPath))
-                NotifyGoneAndRemove();
-        }));
+            int result = 0;
+            bool fallback = item.Type == ItemType.Url;
+            if (!fallback)
+            {
+                try
+                {
+                    result = await Services.StaTaskRunner.Run(() =>
+                        ShowShellMenu(item.TargetPath, (int)pt.X, (int)pt.Y));
+                }
+                catch (Exception ex)
+                {
+                    App.LogError(ex, "ItemTile.ShowShellMenu");
+                    fallback = true;
+                }
+            }
+            if (fallback)
+            {
+                var menu = BuildContextMenu();
+                menu.PlacementTarget = this;
+                menu.Placement = PlacementMode.Bottom;
+                menu.IsOpen = true;
+                return;
+            }
+            if (result == 0x7000) { RemoveFromBox(); return; }
+
+            // 原生菜单可能执行了"删除/剪切/重命名"等命令,使目标路径失效。延一帧校验刷新。
+            await Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (Item is not null && ReferenceEquals(Item, item) && IsLocalPathItem(item) && !TargetExists(item.TargetPath))
+                    NotifyGoneAndRemove();
+            }));
+        }
+        finally
+        {
+            ShellMenuGate.Release();
+        }
     }
 
     private static bool IsLocalPathItem(BoxItem item) =>

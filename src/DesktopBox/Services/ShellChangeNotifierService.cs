@@ -24,6 +24,14 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
     public event EventHandler? SystemIconChanged;
     public event EventHandler? DesktopFilesChanged;
 
+    internal const uint FileChangeMask = Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE | Shell32.SHCNE_RENAMEITEM
+                                       | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_RMDIR | Shell32.SHCNE_RENAMEFOLDER;
+
+    internal const uint SystemIconChangeMask = Shell32.SHCNE_UPDATEIMAGE | Shell32.SHCNE_ASSOCCHANGED
+                                             | Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE
+                                             | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_UPDATEDIR
+                                             | Shell32.SHCNE_RMDIR;
+
     public bool Register(IntPtr hwnd)
     {
         if (_registered) return true;
@@ -31,10 +39,7 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
 
         // 文件级事件:用于清理盒子中已失效的条目(用户在资源管理器删桌面文件后盒子同步)。
         // 图标层事件:用于刷新系统图标(回收站空满、此电脑盘符变化、关联变化)。
-        const uint fileEvents = Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE | Shell32.SHCNE_RENAMEITEM
-                              | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_RMDIR | Shell32.SHCNE_RENAMEFOLDER;
-        const uint iconEvents = Shell32.SHCNE_UPDATEIMAGE | Shell32.SHCNE_ASSOCCHANGED;
-        const uint events = fileEvents | iconEvents;
+        const uint events = FileChangeMask | SystemIconChangeMask;
         const uint sources = Shell32.SHCNRF_ShellLevel | Shell32.SHCNRF_InterruptLevel | Shell32.SHCNRF_NewDelivery;
 
         // 全局监听(pidl=Zero):收窄到桌面 PIDL 时收不到任何消息(非标准桌面路径解析问题),
@@ -74,15 +79,16 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
             }
 
             // 分流:图标层信号 → 刷系统图标;文件级变化 → 清盒子失效项。
-            const uint fileMask = Shell32.SHCNE_CREATE | Shell32.SHCNE_DELETE | Shell32.SHCNE_RENAMEITEM
-                                | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_RMDIR | Shell32.SHCNE_RENAMEFOLDER;
-            if ((events & (Shell32.SHCNE_UPDATEIMAGE | Shell32.SHCNE_ASSOCCHANGED)) != 0)
+            if (ShouldRefreshSystemIcons(events))
                 ScheduleFire(isIcon: true);
-            if ((events & fileMask) != 0)
+            if ((events & FileChangeMask) != 0)
                 ScheduleFire(isIcon: false);
         }
         catch (Exception ex) { App.LogError(ex, "ShellChangeNotifier.OnShellNotify"); }
     }
+
+    internal static bool ShouldRefreshSystemIcons(uint events) =>
+        (events & SystemIconChangeMask) != 0;
 
     /// <summary>节流合并:短时间内可能连发多个通知(回收站清空连发 CREATE/DELETE/UPDATE),
     /// 用 400ms 延迟合并为一次回调。单次 Timer(period=Infinite)复用时必须重新 Change 才会再次触发。</summary>
