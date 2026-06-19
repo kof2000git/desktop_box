@@ -22,23 +22,11 @@ static bool EqualsVerb(const wchar_t* actual, const wchar_t* expected) {
     return actual && _wcsicmp(actual, expected) == 0;
 }
 
-static bool EndsWithNoCase(const wchar_t* value, const wchar_t* suffix) {
-    if (!value || !suffix) return false;
-    const size_t valueLen = wcslen(value);
-    const size_t suffixLen = wcslen(suffix);
-    if (suffixLen > valueLen) return false;
-    return _wcsicmp(value + valueLen - suffixLen, suffix) == 0;
-}
-
-static bool IsShortcutPath(const wchar_t* path) {
-    return EndsWithNoCase(path, L".lnk");
-}
-
 static bool IsPropertiesCommand(const std::wstring& verb) {
     return EqualsVerb(verb.c_str(), L"properties");
 }
 
-static bool ShowShortcutProperties(const wchar_t* path, HWND owner) {
+static bool ShowShellProperties(const wchar_t* path, HWND owner) {
     if (!path || !*path) return false;
 
     SHELLEXECUTEINFOW sei = {};
@@ -216,8 +204,8 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
     } else if (cmd >= DBX_CMD_FIRST && cmd <= DBX_CMD_LAST) {
         const UINT idCmd = cmd - DBX_CMD_FIRST;
         const std::wstring verb = GetCommandVerb(cm, idCmd);
-        if (IsShortcutPath(path) && IsPropertiesCommand(verb)) {
-            DbgLog(ShowShortcutProperties(path, hwndMenu) ? "ShowShortcutProperties-OK" : "ShowShortcutProperties-FAIL");
+        if (IsPropertiesCommand(verb)) {
+            DbgLog(ShowShellProperties(path, hwndMenu) ? "ShowShellProperties-OK" : "ShowShellProperties-FAIL");
             result = 0;
             goto cleanup;
         }

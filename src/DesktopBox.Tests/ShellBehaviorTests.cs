@@ -105,17 +105,18 @@ public class ShellBehaviorTests
     }
 
     [Fact]
-    public void NativeShellMenu_OpensShortcutPropertiesThroughShellExecute()
+    public void NativeShellMenu_OpensAllPropertiesThroughShellExecute()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
         var source = File.ReadAllText(sourcePath);
 
-        source.Should().Contain("IsShortcutPath");
         source.Should().Contain("IsPropertiesCommand");
-        source.Should().Contain("ShowShortcutProperties");
+        source.Should().Contain("ShowShellProperties");
         source.Should().Contain("ShellExecuteExW");
         source.Should().Contain("SEE_MASK_INVOKEIDLIST");
         source.Should().Contain("L\"properties\"");
+        source.Should().Contain("if (IsPropertiesCommand(verb))");
+        source.Should().NotContain("IsShortcutPath(path) && IsPropertiesCommand");
     }
 
     [Fact]
