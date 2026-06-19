@@ -8,7 +8,12 @@ obj/
 ## 构建产物(不入库,避免仓库膨胀)
 publish/
 publish-fixed/
+publish-test/
 release/
+
+## 本地协作/调试状态
+.omx/
+omx_wiki/
 
 ## C++ 编译中间产物
 *.obj

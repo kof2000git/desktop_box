@@ -47,8 +47,7 @@ public partial class ItemTile : UserControl
     private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (Item is null) return;
-        if (Window.GetWindow(this) is not Views.MainWindow mw) return;
-        if (mw.DataContext is not ViewModels.MainViewModel vm) return;
+        var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
         vm.HandleTileClick(Item, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
     }
 
@@ -244,8 +243,7 @@ public partial class ItemTile : UserControl
         // 资源管理器也是这种行为:多选后右键弹的是批量菜单,而非单文件 verb 菜单。
         if (item.IsSelected)
         {
-            if (Window.GetWindow(this) is not Views.MainWindow mw) return;
-            if (mw.DataContext is not ViewModels.MainViewModel vm) return;
+            var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
             if (vm.GetSelectedItems().Count > 1) return;   // 放行 → 冒泡到 BoxControl 菜单
         }
 
@@ -393,8 +391,7 @@ public partial class ItemTile : UserControl
     private void RemoveFromBox()
     {
         if (Item is null) return;
-        if (Window.GetWindow(this) is not Views.MainWindow mw) return;
-        if (mw.DataContext is not ViewModels.MainViewModel vm) return;
+        var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
         vm.RemoveItemAnywhere(Item);
     }
 }

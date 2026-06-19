@@ -8,6 +8,16 @@ public static class SystemParametersHelper
 {
     public static IReadOnlyList<Rect> AllScreens => GetScreens();
 
+    public static double LayoutWidth
+    {
+        get
+        {
+            var screens = AllScreens;
+            if (screens.Count == 0) return SystemParameters.PrimaryScreenWidth;
+            return screens.Max(s => s.Right) - screens.Min(s => s.Left);
+        }
+    }
+
     private static List<Rect> GetScreens()
     {
         var list = new List<Rect>();

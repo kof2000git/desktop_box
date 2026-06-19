@@ -50,7 +50,7 @@ public partial class BoxControl : UserControl
     {
         if (e.ClickCount >= 2 || Vm is null) return;
         _isDragging = true;
-        _dragOrigin = e.GetPosition(null);
+        _dragOrigin = PointToScreen(e.GetPosition(this));
         _boxOrigin = new Point(Vm.X, Vm.Y);   // 记录起点:拖动期间意图位置=起点+累积位移
         _snappedX = _snappedY = false;        // 新一次拖动:重置磁吸迟滞状态
         Mouse.Capture((IInputElement)sender);
@@ -60,7 +60,7 @@ public partial class BoxControl : UserControl
     private void OnHeaderMove(object sender, MouseEventArgs e)
     {
         if (!_isDragging || Vm is null) return;
-        var pos = e.GetPosition(null);
+        var pos = PointToScreen(e.GetPosition(this));
         // 意图位置 = 起点位置 + 累积位移(不被磁吸覆盖,慢拖也能持续累积以脱离磁吸)
         double x = _boxOrigin.X + (pos.X - _dragOrigin.X);
         double y = _boxOrigin.Y + (pos.Y - _dragOrigin.Y);

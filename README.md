@@ -10,7 +10,7 @@
 ![WPF](https://img.shields.io/badge/WPF-.NET-blueviolet)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows)
 ![License](https://img.shields.io/badge/license-MIT-success)
-![Single File](https://img.shields.io/badge/build-single--file%20~71MB-orange)
+![Single File](https://img.shields.io/badge/build-single--file%20~74MB-orange)
 
 </div>
 
@@ -26,6 +26,7 @@
 - [🖼️ Screenshots · 截图](#️-screenshots--截图)
 - [📦 Download & Install · 下载安装](#-download--install--下载安装)
 - [🚀 Usage · 使用](#-usage--使用)
+- [🧰 Support · 问题反馈](#-support--问题反馈)
 - [🔨 Build from Source · 从源码编译](#-build-from-source--从源码编译)
 - [🏗️ Architecture · 架构](#️-architecture--架构)
 - [❓ FAQ · 常见问题](#-faq--常见问题)
@@ -47,7 +48,7 @@
 | 👁️ | **Hide/Show desktop icons** — One toggle clears your real desktop icons (purely visual, no files touched). |
 | 🖥️ | **System-icons box** — This PC / Recycle Bin / Control Panel / Network with **real system icons**. |
 | 🖱️ | **Native shell context menu** — Real Windows right-click menu (Open / Properties / Send To / …) via a bundled C++ DLL. |
-| ♻️ | **Green & portable** — A single ~71 MB exe. Config & icon cache live **next to the exe**; delete everything except the exe and it still runs and regenerates them. |
+| ♻️ | **Green & portable** — A single ~74 MB exe. Config & icon cache live **next to the exe**; delete everything except the exe and it still runs and regenerates them. |
 | 🔒 | **No telemetry, no network** — Never connects anywhere. |
 
 **🇨🇳 中文**
@@ -61,7 +62,7 @@
 | 👁️ | **隐藏/显示桌面图标** — 一键清空桌面真实图标(纯视觉,不动文件)。 |
 | 🖥️ | **系统图标盒子** — 此电脑/回收站/控制面板/网络,用**真实系统图标**。 |
 | 🖱️ | **原生右键菜单** — 真正的 Windows 右键菜单(打开/属性/发送到/…),由配套 C++ DLL 提供。 |
-| ♻️ | **绿色便携** — 单个 ~71MB 的 exe。默认把配置与图标缓存放在**exe 同目录**;若目录不可写,会自动退到 `%LocalAppData%\\DesktopBox`。 |
+| ♻️ | **绿色便携** — 单个 ~74MB 的 exe。默认把配置与图标缓存放在**exe 同目录**;若目录不可写,会自动退到 `%LocalAppData%\\DesktopBox`。 |
 | 🔒 | **零联网、零遥测** — 永不联网。 |
 
 ---
@@ -87,7 +88,7 @@ Go to **[Releases](../../releases)** and grab one of:
 
 | File · 文件 | 说明 |
 |---|---|
-| `DesktopBox.exe` | **绿色版**(推荐)· 双击即用,免安装,不写注册表 · 71 MB |
+| `DesktopBox.exe` | **绿色版**(推荐)· 双击即用,免安装,不写注册表 · 74 MB |
 | `DesktopBox.ShellMenu.dll` | 原生右键菜单 DLL · 与 exe 放同目录(可选,缺则无原生菜单) |
 | `DesktopBoxSetup.exe` | 安装包 · 一路 Next 即可(向导英文,软件本体中文) |
 
@@ -120,6 +121,14 @@ Go to **[Releases](../../releases)** and grab one of:
 5. **一键整理** — 桌面空白处右键 →「一键整理桌面」→ 散乱文件按类型归入标签盒子,**文件原地不动**。
 
 📖 **Full guide · 完整文档:** [使用说明.md](使用说明.md)
+
+---
+
+## 🧰 Support · 问题反馈
+
+遇到问题、需要反馈 bug 或交流使用方法,可以加入 QQ 群: **657713542**。
+
+For bugs, please open an [issue](../../issues) with reproduction steps and `logs/error.log`. Chinese users can also join QQ group **657713542** for support.
 
 ---
 
@@ -158,7 +167,7 @@ cd desktop_box
 # 编译整个解决方案
 dotnet build DesktopBox.sln -c Release
 
-# 运行单元测试 (21 项)
+# 运行单元测试
 dotnet test DesktopBox.sln
 ```
 
@@ -175,9 +184,9 @@ dotnet publish src/DesktopBox/DesktopBox.csproj \
   -o publish
 ```
 
-This produces a **single ~71 MB `publish/DesktopBox.exe`** with the entire .NET runtime + WPF bundled inside.
+This produces a **single ~74 MB `publish/DesktopBox.exe`** with the entire .NET runtime + WPF bundled inside.
 
-产出**单个 ~71MB 的 `publish/DesktopBox.exe`**,内含完整 .NET 运行时 + WPF。
+产出**单个 ~74MB 的 `publish/DesktopBox.exe`**,内含完整 .NET 运行时 + WPF。
 
 ### 4️⃣ Build the native shell-menu DLL · 编译原生右键菜单 DLL
 
@@ -212,19 +221,19 @@ src/
 ├── DesktopBox/              # Main app (C# / WPF / .NET 8)
 │   ├── Models/              # Box, BoxItem, AppConfig, AppPaths …
 │   ├── Services/            # Persistence, IconExtractor, Organize,
-│   │                        #   DesktopLayer, DesktopIcons, Theme, …
+│   │                        #   DesktopIcons, Theme, persistence …
 │   ├── ViewModels/          # MVVM (CommunityToolkit.Mvvm)
 │   ├── Views/ & Controls/   # MainWindow, BoxControl, ItemTile …
 │   └── Native/              # P/Invoke: Shell32, User32, IImageList …
 ├── DesktopBox.ShellMenu/    # Native C++ DLL — IContextMenu host
 │   ├── DesktopBox.ShellMenu.cpp
 │   └── build_dll.bat
-└── DesktopBox.Tests/        # xUnit — 21 tests
+└── DesktopBox.Tests/        # xUnit regression tests
 ```
 
 **Key design decisions · 关键设计**
 
-- **Desktop-layer window** — The main window reparents to the `WorkerW` desktop layer so it sits beneath browser windows yet above the desktop wallpaper (won't steal focus, won't block other apps). Falls back to a normal non-topmost window if reparenting fails.
+- **Desktop-layer boxes** — Each box is hosted as a transparent child HWND on the desktop shell view, so desktop menus and normal app windows stay above it while the box remains visible through Win+D and desktop-icon toggles.
 - **Reference-only organize** — Tidying never calls `File.Move`; boxes store paths. Zero risk of "lost files".
 - **Portable data** — Config (`boxes.json`, `organize.json`) and icon cache prefer the exe directory; if it is read-only (for example under Program Files), DesktopBox falls back to `%LocalAppData%\DesktopBox`.
 - **Service-layer interfaces + unit tests** — Core logic (categorize, organize, persistence) is fully testable; Native/UI layers are manually verified.
@@ -264,11 +273,13 @@ Copy `boxes.json`. That's it.
 Contributions are welcome! · 欢迎贡献!
 
 - 🐛 **Bugs** — Open an [issue](../../issues) with steps to reproduce + `logs/error.log`.
+- 🧰 **Support** — Chinese users can join QQ group **657713542**.
 - 💡 **Ideas** — Multi-monitor, URL icons, box search, collapsible boxes …
 - 🌍 **i18n** — Help translate the UI.
 - ⭐ **Star it** if it helps you!
 
 - 🐛 **Bug** — 提 [issue](../../issues),附复现步骤 + `logs/error.log`。
+- 🧰 **反馈交流群** — 有问题可加入 QQ 群 **657713542**。
 - 💡 **建议** — 多屏支持、网址图标、盒子搜索、折叠盒子 …
 - 🌍 **国际化** — 帮助翻译界面。
 - ⭐ 觉得有用就**点个 Star**!

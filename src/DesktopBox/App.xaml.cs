@@ -3,7 +3,6 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Windows;
-using System.Windows.Threading;
 using DesktopBox.Services;
 using DesktopBox.ViewModels;
 using DesktopBox.Views;
@@ -70,14 +69,8 @@ public partial class App : Application
         // 界面语言:检测系统语言或用手动设置(默认 auto=跟随系统)
         Services.GetRequiredService<ILocalizerService>().Apply(cfg.Settings.Language);
 
-        // 主窗口
         var main = Services.GetRequiredService<MainWindow>();
         main.Show();
-
-        // 贴桌面层(WorkerW 子窗口):在桌面图标层,浏览器等普通窗口在其之上,不互相遮挡。
-        // reparent 失败时退化为普通窗口(非置顶)——置顶会挡住浏览器等,体验更差。记录日志便于排查。
-        if (!Services.GetRequiredService<IDesktopService>().AttachToDesktop(main))
-            App.LogError(new Exception("AttachToDesktop failed; window stays as normal (non-topmost)"), "App.OnStartup");
     }
 
     /// <summary>一次性把旧版 %AppData%\DesktopBox 下的配置搬到可执行文件同目录(仅在目标缺失时复制)。</summary>
@@ -150,7 +143,6 @@ public partial class App : Application
         s.AddSingleton<IPersistenceService>(_ => new JsonStoreService(Models.AppConfig.DefaultPath));
         s.AddSingleton<IDropParserService, DropParserService>();
         s.AddSingleton<IIconExtractorService, IconExtractorService>();
-        s.AddSingleton<IDesktopService, DesktopLayerService>();
         s.AddSingleton<IThemeService, ThemeService>();
         s.AddSingleton<IStartupService, StartupService>();
         s.AddSingleton<ICategorizerService, CategorizerService>();

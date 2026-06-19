@@ -4,6 +4,7 @@
 #include <shlobj.h>
 #include <shellapi.h>
 #include <objbase.h>
+#include <shldisp.h>
 #include <cstdio>
 #include <string>
 
@@ -11,9 +12,107 @@
 #define DBX_CMD_LAST  0x6FFF
 #define DBX_ID_REMOVE 0x7000
 
+// Unicode build still sees CFSTR_PREFERREDDROPEFFECT as a narrow SDK macro here.
+static const wchar_t* kPreferredDropEffectFormat = L"Preferred DropEffect";
 static const wchar_t* kMenuWndClass = L"DesktopBox_ShellMenuHook_4F8A";
 static IContextMenu3* g_cm3 = nullptr;
 static IContextMenu2* g_cm2 = nullptr;
+
+static bool EqualsVerb(const wchar_t* actual, const wchar_t* expected) {
+    return actual && _wcsicmp(actual, expected) == 0;
+}
+
+static bool EndsWithNoCase(const wchar_t* value, const wchar_t* suffix) {
+    if (!value || !suffix) return false;
+    const size_t valueLen = wcslen(value);
+    const size_t suffixLen = wcslen(suffix);
+    if (suffixLen > valueLen) return false;
+    return _wcsicmp(value + valueLen - suffixLen, suffix) == 0;
+}
+
+static bool IsShortcutPath(const wchar_t* path) {
+    return EndsWithNoCase(path, L".lnk");
+}
+
+static bool IsPropertiesCommand(const std::wstring& verb) {
+    return EqualsVerb(verb.c_str(), L"properties");
+}
+
+static bool ShowShortcutProperties(const wchar_t* path, HWND owner) {
+    if (!path || !*path) return false;
+
+    SHELLEXECUTEINFOW sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_INVOKEIDLIST;
+    sei.hwnd = owner;
+    sei.lpVerb = L"properties";
+    sei.lpFile = path;
+    sei.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&sei) != FALSE;
+}
+
+static std::wstring GetCommandVerb(IContextMenu* cm, UINT idCmd) {
+    wchar_t verb[128] = {};
+    HRESULT hr = cm->GetCommandString(idCmd, GCS_VERBW, nullptr, reinterpret_cast<LPSTR>(verb), sizeof(verb));
+    if (FAILED(hr) || !verb[0])
+        return L"";
+    return verb;
+}
+
+static bool SetFileClipboard(const wchar_t* path, DWORD dropEffect) {
+    if (!path || !*path) return false;
+
+    const size_t pathChars = wcslen(path) + 1;
+    const size_t bytes = sizeof(DROPFILES) + (pathChars + 1) * sizeof(wchar_t);
+    HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
+    if (!hDrop) return false;
+
+    auto* drop = static_cast<DROPFILES*>(GlobalLock(hDrop));
+    if (!drop) {
+        GlobalFree(hDrop);
+        return false;
+    }
+    drop->pFiles = sizeof(DROPFILES);
+    drop->fWide = TRUE;
+    auto* fileList = reinterpret_cast<wchar_t*>(reinterpret_cast<BYTE*>(drop) + sizeof(DROPFILES));
+    memcpy(fileList, path, pathChars * sizeof(wchar_t));
+    fileList[pathChars] = L'\0';
+    GlobalUnlock(hDrop);
+
+    HGLOBAL hEffect = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DWORD));
+    if (!hEffect) {
+        GlobalFree(hDrop);
+        return false;
+    }
+    auto* effect = static_cast<DWORD*>(GlobalLock(hEffect));
+    if (!effect) {
+        GlobalFree(hEffect);
+        GlobalFree(hDrop);
+        return false;
+    }
+    *effect = dropEffect;
+    GlobalUnlock(hEffect);
+
+    if (!OpenClipboard(nullptr)) {
+        GlobalFree(hEffect);
+        GlobalFree(hDrop);
+        return false;
+    }
+
+    bool ok = false;
+    EmptyClipboard();
+    const UINT preferredDropEffect = RegisterClipboardFormatW(kPreferredDropEffectFormat);
+    if (SetClipboardData(CF_HDROP, hDrop) && SetClipboardData(preferredDropEffect, hEffect)) {
+        hDrop = nullptr;
+        hEffect = nullptr;
+        ok = true;
+    }
+    CloseClipboard();
+
+    if (hEffect) GlobalFree(hEffect);
+    if (hDrop) GlobalFree(hDrop);
+    return ok;
+}
 
 static void DbgLog(const char* step, long hr = 0) {
 #ifdef DESKTOPBOX_SHELLMENU_DIAG
@@ -115,14 +214,28 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
     if (cmd == DBX_ID_REMOVE) {
         result = DBX_ID_REMOVE;
     } else if (cmd >= DBX_CMD_FIRST && cmd <= DBX_CMD_LAST) {
+        const UINT idCmd = cmd - DBX_CMD_FIRST;
+        const std::wstring verb = GetCommandVerb(cm, idCmd);
+        if (IsShortcutPath(path) && IsPropertiesCommand(verb)) {
+            DbgLog(ShowShortcutProperties(path, hwndMenu) ? "ShowShortcutProperties-OK" : "ShowShortcutProperties-FAIL");
+            result = 0;
+            goto cleanup;
+        }
+
         CMINVOKECOMMANDINFOEX info = {};
         info.cbSize = sizeof(info);
         info.fMask = CMIC_MASK_UNICODE;
-        info.lpVerb = MAKEINTRESOURCEA(cmd - DBX_CMD_FIRST);
-        info.lpVerbW = MAKEINTRESOURCEW(cmd - DBX_CMD_FIRST);
+        info.hwnd = hwndMenu;
+        info.lpVerb = MAKEINTRESOURCEA(idCmd);
+        info.lpVerbW = MAKEINTRESOURCEW(idCmd);
         info.nShow = SW_SHOWNORMAL;
         hr = cm->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&info));
         DbgLog("InvokeCommand", hr);
+        if (SUCCEEDED(hr) && EqualsVerb(verb.c_str(), L"cut")) {
+            DbgLog(SetFileClipboard(path, DROPEFFECT_MOVE) ? "SetFileClipboard-cut-OK" : "SetFileClipboard-cut-FAIL");
+        } else if (SUCCEEDED(hr) && EqualsVerb(verb.c_str(), L"copy")) {
+            DbgLog(SetFileClipboard(path, DROPEFFECT_COPY) ? "SetFileClipboard-copy-OK" : "SetFileClipboard-copy-FAIL");
+        }
         result = 0;
     }
 

@@ -57,7 +57,7 @@
                             Background="Transparent"
                             BorderBrush="#66FFFFFF"
                             Cursor="Hand"
-                            Tag="{Binding DataContext.DesktopIconsVisible, RelativeSource={RelativeSource FindAncestor, AncestorType=Window}}">
+                            Tag="{Binding MainVm.DesktopIconsVisible, RelativeSource={RelativeSource AncestorType=UserControl}}">
                         <Path Width="16" Height="16" Stretch="Uniform"
                               HorizontalAlignment="Center" VerticalAlignment="Center"
                               StrokeThickness="1.6"

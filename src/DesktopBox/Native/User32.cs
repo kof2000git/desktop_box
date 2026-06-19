@@ -1,6 +1,5 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Threading;
 
 namespace DesktopBox.Native;
 
@@ -10,6 +9,8 @@ public static class User32
 {
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
+    public const int WS_EX_LAYERED = 0x00080000;
+    public const uint LWA_ALPHA = 0x00000002;
     public const uint SMTO_NORMAL = 0x0000;
     public const uint WM_COMMAND = 0x0111;
 
@@ -25,20 +26,11 @@ public static class User32
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
-    [DllImport("user32.dll")]
-    public static extern bool SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -52,29 +44,44 @@ public static class User32
     public const int SW_RESTORE = 9;
     public const int SW_SHOWNOACTIVATE = 4;
 
-    public const int GWL_STYLE = -16;
-
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 
-    /// <summary>HWND_TOP:把窗口置于非 topmost 序列顶部(不置顶,不挡后续激活的窗口)。</summary>
-    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    /// <summary>HWND_TOP:把窗口置于非 topmost 序列顶部(不置顶,不挡后续激活的窗口)。</summary>
+    [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool SetWindowText(IntPtr hWnd, string lpString);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr GetParent(IntPtr hWnd);
 
+    public static readonly IntPtr HWND_TOP = IntPtr.Zero;
     public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
-    public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOACTIVATE = 0x0010;
-    public const long WS_EX_TOPMOST = 0x00000008;
+    public const uint SWP_FRAMECHANGED = 0x0020;
+    public const uint SWP_SHOWWINDOW = 0x0040;
+    public const int GWL_STYLE = -16;
+    public const int WS_CHILD = 0x40000000;
+    public const int WS_POPUP = unchecked((int)0x80000000);
+    public const int WS_VISIBLE = 0x10000000;
+    public const int WS_CLIPSIBLINGS = 0x04000000;
+    public const int WS_CLIPCHILDREN = 0x02000000;
 
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
@@ -122,7 +129,7 @@ public static class User32
                 return true;
             }, IntPtr.Zero);
             if (workerW != IntPtr.Zero) return workerW;
-            Thread.Sleep(60);
+            System.Threading.Thread.Sleep(60);
         }
         return IntPtr.Zero;
     }
@@ -142,4 +149,5 @@ public static class User32
         }, IntPtr.Zero);
         return found;
     }
+
 }

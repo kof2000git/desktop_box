@@ -6,7 +6,7 @@
 .DESCRIPTION
     版本号从 src/DesktopBox/DesktopBox.csproj 的 <Version> 自动读取,无需在脚本里硬编码。
     产出:
-      publish/DesktopBox.exe              单文件绿色版(~71MB,self-contained)
+      publish/DesktopBox.exe              单文件绿色版(~74MB,self-contained)
       publish/DesktopBox.ShellMenu.dll    原生右键菜单 DLL
       release/DesktopBox-<ver>-win-x64.zip  发布包(上述两个文件)
 

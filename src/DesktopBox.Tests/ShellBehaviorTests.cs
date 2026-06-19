@@ -1,11 +1,123 @@
 using DesktopBox.Native;
 using DesktopBox.Services;
 using FluentAssertions;
+using System.IO;
 
 namespace DesktopBox.Tests;
 
 public class ShellBehaviorTests
 {
+    [Fact]
+    public void DesktopBoxProject_PublishesNativeShellMenuDllWhenPresent()
+    {
+        var projectPath = FindRepositoryFile("src", "DesktopBox", "DesktopBox.csproj");
+        var project = System.Xml.Linq.XDocument.Load(projectPath);
+        var shellMenuItem = project
+            .Descendants("Content")
+            .SingleOrDefault(e => ((string?)e.Attribute("Include"))?.EndsWith("DesktopBox.ShellMenu.dll", StringComparison.OrdinalIgnoreCase) == true);
+
+        shellMenuItem.Should().NotBeNull();
+        shellMenuItem!.Attribute("Condition")?.Value.Should().Contain("Exists");
+        GetItemMetadata(shellMenuItem, "CopyToOutputDirectory").Should().Be("PreserveNewest");
+        GetItemMetadata(shellMenuItem, "CopyToPublishDirectory").Should().Be("PreserveNewest");
+    }
+
+    [Fact]
+    public void AppManifest_DeclaresWindows8OrNewerCompatibilityForLayeredChildWindows()
+    {
+        var manifestPath = FindRepositoryFile("src", "DesktopBox", "app.manifest");
+        var manifest = File.ReadAllText(manifestPath);
+
+        manifest.Should().Contain("{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}");
+        manifest.Should().Contain("{1f676c76-80e1-4239-95bb-83d0f6d0da78}");
+        manifest.Should().Contain("{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}");
+    }
+
+    [Fact]
+    public void User32_ExposesLayeredWindowAlphaApis()
+    {
+        User32.GWL_EXSTYLE.Should().Be(-20);
+        User32.WS_EX_LAYERED.Should().Be(0x00080000);
+        User32.LWA_ALPHA.Should().Be(0x00000002);
+        typeof(User32).GetMethod(nameof(User32.SetLayeredWindowAttributes)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public void BoxWindow_UsesHwndSourceWithLayeredStyleFromCreation()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("HwndSourceParameters");
+        source.Should().Contain("WS_EX_LAYERED");
+        source.Should().Contain("ExtendedWindowStyle");
+        source.Should().Contain("CompositionTarget.BackgroundColor");
+        source.Should().Contain("Colors.Transparent");
+    }
+
+    [Fact]
+    public void BoxWindow_CanRepairHostAndChildZOrderAfterDesktopIconsToggle()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("EnsureVisibleOnDesktopHost");
+        source.Should().Contain("GetParent");
+        source.Should().Contain("SetParent");
+        source.Should().Contain("HWND_TOP");
+        source.Should().Contain("SWP_SHOWWINDOW");
+    }
+
+    [Fact]
+    public void MainWindow_RepairsBoxWindowsWhenDesktopIconsVisibilityChanges()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("nameof(MainViewModel.DesktopIconsVisible)");
+        source.Should().Contain("RepairBoxWindowsAfterDesktopIconToggle");
+        source.Should().Contain("RepairBoxWindowsOnDesktopLayer");
+        source.Should().Contain("GetDesktopHost(refresh: true)");
+    }
+
+    [Fact]
+    public void MainWindow_DoesNotUseRejectedLayeredAlphaPatch()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().NotContain("SetLayeredWindowAttributes");
+    }
+
+    [Fact]
+    public void NativeShellMenu_SetsExplorerCompatibleClipboardForCutAndCopy()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("GetCommandString");
+        source.Should().Contain("GCS_VERBW");
+        source.Should().Contain("SetFileClipboard");
+        source.Should().Contain("CF_HDROP");
+        source.Should().Contain("Preferred DropEffect");
+        source.Should().Contain("DROPEFFECT_MOVE");
+        source.Should().Contain("DROPEFFECT_COPY");
+    }
+
+    [Fact]
+    public void NativeShellMenu_OpensShortcutPropertiesThroughShellExecute()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("IsShortcutPath");
+        source.Should().Contain("IsPropertiesCommand");
+        source.Should().Contain("ShowShortcutProperties");
+        source.Should().Contain("ShellExecuteExW");
+        source.Should().Contain("SEE_MASK_INVOKEIDLIST");
+        source.Should().Contain("L\"properties\"");
+    }
+
     [Fact]
     public async Task StaTaskRunner_DoesNotBlockCallerWhileWorkRuns()
     {
@@ -37,4 +149,23 @@ public class ShellBehaviorTests
     {
         ShellChangeNotifierService.ShouldRefreshSystemIcons(evt).Should().BeTrue();
     }
+
+    private static string FindRepositoryFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException("Could not locate repository file.", Path.Combine(parts));
+    }
+
+    private static string? GetItemMetadata(System.Xml.Linq.XElement item, string name) =>
+        item.Attribute(name)?.Value ?? item.Element(name)?.Value;
+
 }
