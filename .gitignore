@@ -9,6 +9,7 @@ obj/
 publish/
 publish-fixed/
 publish-test/
+publish-test-latest/
 release/
 
 ## 本地协作/调试状态

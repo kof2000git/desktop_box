@@ -46,6 +46,7 @@ public sealed class BoxWindow : IDisposable
             Height = box.Height
         };
         _source.RootVisual = _content;
+        MoveResize(Native.User32.HWND_TOP);
         box.PropertyChanged += OnBoxPropertyChanged;
     }
 
@@ -81,18 +82,18 @@ public sealed class BoxWindow : IDisposable
             return;
 
         if (e.PropertyName is nameof(BoxViewModel.X) or nameof(BoxViewModel.Y) or nameof(BoxViewModel.Width) or nameof(BoxViewModel.Height))
-            MoveResize();
+            MoveResize(Native.User32.HWND_TOP);
         else if (e.PropertyName == nameof(BoxViewModel.Header))
             Native.User32.SetWindowText(Handle, Box.Header);
     }
 
-    private void MoveResize()
+    private void MoveResize(IntPtr insertAfter)
     {
         _content.Width = Box.Width;
         _content.Height = Box.Height;
         Native.User32.SetWindowPos(
             Handle,
-            Native.User32.HWND_NOTOPMOST,
+            insertAfter,
             (int)Math.Round(Box.X),
             (int)Math.Round(Box.Y),
             Math.Max(1, (int)Math.Round(Box.Width)),

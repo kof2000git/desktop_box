@@ -150,4 +150,15 @@ public static class User32
         return found;
     }
 
+    /// <summary>定位桌面图标 ListView。实际图标可见性以它为准,注册表可能滞后或被外部工具改坏。</summary>
+    public static IntPtr FindDesktopListView()
+    {
+        var def = FindShellDefView();
+        if (def == IntPtr.Zero)
+            return IntPtr.Zero;
+
+        var view = FindWindowEx(def, IntPtr.Zero, "SysListView32", "FolderView");
+        return view != IntPtr.Zero ? view : FindWindowEx(def, IntPtr.Zero, "SysListView32", null);
+    }
+
 }

@@ -69,6 +69,17 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void BoxWindow_KeepsDesktopChildAtTopWhenMovingOrResizing()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("MoveResize(Native.User32.HWND_TOP)");
+        source.Should().Contain("private void MoveResize(IntPtr insertAfter)");
+        source.Should().NotContain("HWND_NOTOPMOST");
+    }
+
+    [Fact]
     public void MainWindow_RepairsBoxWindowsWhenDesktopIconsVisibilityChanges()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
@@ -78,6 +89,65 @@ public class ShellBehaviorTests
         source.Should().Contain("RepairBoxWindowsAfterDesktopIconToggle");
         source.Should().Contain("RepairBoxWindowsOnDesktopLayer");
         source.Should().Contain("GetDesktopHost(refresh: true)");
+    }
+
+    [Fact]
+    public void MainWindow_UsesShellDefViewAsPrimaryVisibleDesktopHost()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("FindShellDefView");
+        source.Should().Contain("GetProgman");
+        source.IndexOf("FindShellDefView", StringComparison.Ordinal)
+            .Should().BeLessThan(source.IndexOf("GetProgman", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DesktopIconsService_ReadsActualDesktopListViewVisibilityBeforeRegistryFallback()
+    {
+        var servicePath = FindRepositoryFile("src", "DesktopBox", "Services", "DesktopIconsService.cs");
+        var service = File.ReadAllText(servicePath);
+        var user32Path = FindRepositoryFile("src", "DesktopBox", "Native", "User32.cs");
+        var user32 = File.ReadAllText(user32Path);
+
+        user32.Should().Contain("FindDesktopListView");
+        user32.Should().Contain("SysListView32");
+        service.Should().Contain("FindDesktopListView");
+        service.Should().Contain("IsWindowVisible");
+        service.IndexOf("FindDesktopListView", StringComparison.Ordinal)
+            .Should().BeLessThan(service.IndexOf("OpenSubKey", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BoxControl_ConstrainsWrapPanelsToScrollViewportWidth()
+    {
+        var xamlPath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml");
+        var xaml = File.ReadAllText(xamlPath);
+
+        xaml.Should().Contain("x:Name=\"ItemsScroll\"");
+        xaml.Should().Contain("x:Name=\"ItemsViewport\"");
+        xaml.Should().Contain("Path=ViewportWidth");
+        xaml.Should().Contain("AncestorType=ItemsControl");
+        xaml.Should().Contain("ActualWidth");
+    }
+
+    [Fact]
+    public void BoxControl_UsesHeaderMouseDragAndLargerResizeHitTargets()
+    {
+        var xamlPath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml");
+        var xaml = File.ReadAllText(xamlPath);
+        var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
+        var code = File.ReadAllText(codePath);
+
+        xaml.Should().Contain("MouseLeftButtonDown=\"OnHeaderDown\"");
+        xaml.Should().Contain("MouseMove=\"OnHeaderMove\"");
+        xaml.Should().Contain("MouseLeftButtonUp=\"OnHeaderUp\"");
+        xaml.Should().Contain("Height=\"10\"");
+        xaml.Should().Contain("Width=\"10\"");
+        xaml.Should().Contain("Width=\"18\"");
+        code.Should().Contain("OnHeaderMove");
+        code.Should().Contain("SystemParametersHelper.ClampIntoScreens");
     }
 
     [Fact]

@@ -133,18 +133,21 @@
             </Grid>
 
             <!-- 条目列表(当前标签 / Items):按 ViewMode 切换布局 -->
-            <ScrollViewer Grid.Row="2"
+            <ScrollViewer x:Name="ItemsScroll"
+                          Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Background="Transparent"
                           PreviewMouseLeftButtonDown="OnItemsAreaMouseDown"
                           Padding="4">
-                <Grid Background="Transparent">
+                <Grid x:Name="ItemsViewport"
+                      Width="{Binding ElementName=ItemsScroll, Path=ViewportWidth}"
+                      Background="Transparent">
                     <!-- 大图标:默认(大方块) -->
                     <ItemsControl ItemsSource="{Binding DisplayItems}"
                                   Visibility="{Binding IsLarge, Converter={StaticResource BoolVis}}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel ItemWidth="100" Orientation="Horizontal"/></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel ItemWidth="100" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Orientation="Horizontal"/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate><ctl:ItemTile IconSize="Large"/></DataTemplate>
@@ -155,7 +158,7 @@
                     <ItemsControl ItemsSource="{Binding DisplayItems}"
                                   Visibility="{Binding IsMedium, Converter={StaticResource BoolVis}}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel ItemWidth="84" Orientation="Horizontal"/></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel ItemWidth="84" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Orientation="Horizontal"/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate><ctl:ItemTile IconSize="Medium"/></DataTemplate>
@@ -166,7 +169,7 @@
                     <ItemsControl ItemsSource="{Binding DisplayItems}"
                                   Visibility="{Binding IsSmall, Converter={StaticResource BoolVis}}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Orientation="Horizontal"/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate><ctl:ItemTile IconSize="Small"/></DataTemplate>
@@ -199,7 +202,7 @@
                     <ItemsControl ItemsSource="{Binding DisplayItems}"
                                   Visibility="{Binding IsTile, Converter={StaticResource BoolVis}}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}}" Orientation="Horizontal"/></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate><ctl:ItemTile IconSize="Tile"/></DataTemplate>
@@ -222,14 +225,14 @@
                         </Setter>
                     </Style>
                 </Grid.Resources>
-                <Thumb Tag="N"  HorizontalAlignment="Stretch" VerticalAlignment="Top"    Height="6"  Cursor="SizeNS"   DragDelta="OnResize"/>
-                <Thumb Tag="S"  HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="6"  Cursor="SizeNS"   DragDelta="OnResize"/>
-                <Thumb Tag="W"  VerticalAlignment="Stretch"   HorizontalAlignment="Left"  Width="6"  Cursor="SizeWE"   DragDelta="OnResize"/>
-                <Thumb Tag="E"  VerticalAlignment="Stretch"   HorizontalAlignment="Right" Width="6"  Cursor="SizeWE"   DragDelta="OnResize"/>
-                <Thumb Tag="NW" HorizontalAlignment="Left"  VerticalAlignment="Top"    Width="12" Height="12" Cursor="SizeNWSE" DragDelta="OnResize"/>
-                <Thumb Tag="NE" HorizontalAlignment="Right" VerticalAlignment="Top"    Width="12" Height="12" Cursor="SizeNESW" DragDelta="OnResize"/>
-                <Thumb Tag="SW" HorizontalAlignment="Left"  VerticalAlignment="Bottom" Width="12" Height="12" Cursor="SizeNESW" DragDelta="OnResize"/>
-                <Thumb Tag="SE" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="12" Height="12" Cursor="SizeNWSE" DragDelta="OnResize"/>
+                <Thumb Tag="N"  HorizontalAlignment="Stretch" VerticalAlignment="Top"    Height="10" Cursor="SizeNS"   IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="S"  HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="10" Cursor="SizeNS"   IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="W"  VerticalAlignment="Stretch"   HorizontalAlignment="Left"  Width="10" Cursor="SizeWE"   IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="E"  VerticalAlignment="Stretch"   HorizontalAlignment="Right" Width="10" Cursor="SizeWE"   IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="NW" HorizontalAlignment="Left"  VerticalAlignment="Top"    Width="18" Height="18" Cursor="SizeNWSE" IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="NE" HorizontalAlignment="Right" VerticalAlignment="Top"    Width="18" Height="18" Cursor="SizeNESW" IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="SW" HorizontalAlignment="Left"  VerticalAlignment="Bottom" Width="18" Height="18" Cursor="SizeNESW" IsHitTestVisible="True" DragDelta="OnResize"/>
+                <Thumb Tag="SE" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="18" Height="18" Cursor="SizeNWSE" IsHitTestVisible="True" DragDelta="OnResize"/>
             </Grid>
         </Grid>
     </Border>

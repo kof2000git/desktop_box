@@ -17,7 +17,8 @@ public partial class BoxControl : UserControl
     private Point _dragOrigin;
     private Point _boxOrigin;            // 拖动起始时盒子位置:用"起点+累积位移"算意图位置,不受磁吸覆盖
     private bool _isDragging;
-    private bool _snappedX, _snappedY;   // 磁吸迟滞状态:当前是否已吸附在某条垂直/水平边
+    private readonly BoxEdgeSnapState _snapX = new();
+    private readonly BoxEdgeSnapState _snapY = new();
     private MainViewModel? _mainVm;
     private ILocalizerService? _localizer;
 
@@ -52,7 +53,7 @@ public partial class BoxControl : UserControl
         _isDragging = true;
         _dragOrigin = PointToScreen(e.GetPosition(this));
         _boxOrigin = new Point(Vm.X, Vm.Y);   // 记录起点:拖动期间意图位置=起点+累积位移
-        _snappedX = _snappedY = false;        // 新一次拖动:重置磁吸迟滞状态
+        ResetSnapState();
         Mouse.Capture((IInputElement)sender);
         e.Handled = true;
     }
@@ -74,28 +75,17 @@ public partial class BoxControl : UserControl
     /// <summary>边缘磁吸(带迟滞):盒子靠近显示器工作区边缘时自动贴合。</summary>
     private void ApplyEdgeMagnet(BoxViewModel vm, ref double x, ref double y)
     {
-        const double snap = 12;     // 吸附阈值:靠近此距离时贴合
-        const double release = 40;  // 脱离阈值:已吸附时需远离此距离才脱开(迟滞量)
-        const double margin = 4;    // 贴合后离边的余量
+        var screens = SystemParametersHelper.AllScreens;
+        x = EdgeMagnet.ApplyHorizontal(_snapX, x, vm.Width, screens);
+        y = EdgeMagnet.ApplyVertical(_snapY, y, vm.Height, screens);
+    }
 
-        double threshX = _snappedX ? release : snap;
-        _snappedX = false;
-        foreach (var s in SystemParametersHelper.AllScreens)
-        {
-            double left = s.Left + margin;
-            double right = s.Right - vm.Width - margin;
-            if (Math.Abs(x - left) <= threshX) { x = left; _snappedX = true; break; }
-            if (Math.Abs(x - right) <= threshX) { x = right; _snappedX = true; break; }
-        }
-        double threshY = _snappedY ? release : snap;
-        _snappedY = false;
-        foreach (var s in SystemParametersHelper.AllScreens)
-        {
-            double top = s.Top + margin;
-            double bottom = s.Bottom - vm.Height - margin;
-            if (Math.Abs(y - top) <= threshY) { y = top; _snappedY = true; break; }
-            if (Math.Abs(y - bottom) <= threshY) { y = bottom; _snappedY = true; break; }
-        }
+    private void ResetSnapState()
+    {
+        _snapX.Snapped = false;
+        _snapX.Edge = null;
+        _snapY.Snapped = false;
+        _snapY.Edge = null;
     }
 
     private void OnHeaderUp(object sender, MouseButtonEventArgs e)

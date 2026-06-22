@@ -21,6 +21,10 @@ public class DesktopIconsService : IDesktopIconsService
         {
             try
             {
+                var listView = User32.FindDesktopListView();
+                if (listView != IntPtr.Zero)
+                    return User32.IsWindowVisible(listView);
+
                 using var key = Registry.CurrentUser.OpenSubKey(AdvancedKey);
                 return key?.GetValue(ValueName) is not int v || v == 0;
             }
@@ -38,6 +42,7 @@ public class DesktopIconsService : IDesktopIconsService
             {
                 // 0x7073 是"切换"命令:发一次翻转注册表 + 视图
                 User32.SendMessage(def, User32.WM_COMMAND, (IntPtr)TOGGLE_CMD, IntPtr.Zero);
+                SetRegistry(visible ? 0 : 1);
                 return;
             }
             // 兜底:只写注册表(下次 explorer 刷新后生效)
