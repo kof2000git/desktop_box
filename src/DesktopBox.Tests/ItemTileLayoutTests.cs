@@ -1,5 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DesktopBox.Controls;
@@ -81,6 +83,26 @@ public class ItemTileLayoutTests
         });
     }
 
+    [Fact]
+    public void BoxControl_ToggleIconsButtonIsNotCoveredByNorthEastResizeThumb()
+    {
+        RunOnSta(() =>
+        {
+            var box = new BoxViewModel(new Box { Name = "B", Width = 260, Height = 200 });
+            var control = new BoxControl { DataContext = box, Width = box.Width, Height = box.Height };
+            Arrange(control);
+
+            var button = ((Button)control.FindName("ToggleIconsBtn"));
+            var buttonCenter = button.TranslatePoint(
+                new Point(button.ActualWidth / 2, button.ActualHeight / 2),
+                control);
+            var hit = VisualTreeHelper.HitTest(control, buttonCenter)?.VisualHit;
+
+            FindAncestor<Button>(hit).Should().BeSameAs(button);
+            FindAncestor<Thumb>(hit).Should().BeNull();
+        });
+    }
+
     private static ItemTile ArrangeTile(TileSize size, BoxItem item)
     {
         var tile = new ItemTile
@@ -113,6 +135,18 @@ public class ItemTileLayoutTests
             foreach (var nested in FindVisualChildren<T>(child))
                 yield return nested;
         }
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? root) where T : DependencyObject
+    {
+        while (root is not null)
+        {
+            if (root is T typed)
+                return typed;
+            root = VisualTreeHelper.GetParent(root);
+        }
+
+        return null;
     }
 
     private static void RunOnSta(Action action)

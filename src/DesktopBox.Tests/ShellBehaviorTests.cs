@@ -166,14 +166,14 @@ public class ShellBehaviorTests
         xaml.Should().Contain("MouseMove=\"OnHeaderMove\"");
         xaml.Should().Contain("MouseLeftButtonUp=\"OnHeaderUp\"");
         xaml.Should().Contain("LostMouseCapture=\"OnLostMouseCapture\"");
-        xaml.Should().Contain("Height=\"10\"");
+        xaml.Should().Contain("Height=\"10\" Margin=\"0,0,44,0\"");
         xaml.Should().Contain("Width=\"10\"");
         xaml.Should().Contain("Tag=\"S\"");
         xaml.Should().Contain("Height=\"18\" Margin=\"12,0,12,4\"");
         xaml.Should().Contain("Tag=\"E\"");
-        xaml.Should().Contain("Width=\"18\" Margin=\"0,12,4,12\"");
+        xaml.Should().Contain("Width=\"18\" Margin=\"0,36,4,12\"");
         xaml.Should().Contain("Tag=\"NE\"");
-        xaml.Should().Contain("Width=\"28\" Height=\"28\" Margin=\"0,4,4,0\"");
+        xaml.Should().Contain("Width=\"12\" Height=\"28\" Margin=\"0,4,0,0\"");
         xaml.Should().Contain("Tag=\"SE\"");
         xaml.Should().Contain("Width=\"28\" Height=\"28\" Margin=\"0,0,4,4\"");
         xaml.Should().Contain("DragStarted=\"OnResizeStarted\"");

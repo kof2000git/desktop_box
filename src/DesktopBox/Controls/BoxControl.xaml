@@ -238,13 +238,13 @@
                         <Line X1="14" Y1="9" X2="9" Y2="14" Stroke="#CCFFFFFF" StrokeThickness="1"/>
                     </Canvas>
                 </Border>
-                <Thumb Tag="N"  HorizontalAlignment="Stretch" VerticalAlignment="Top"    Height="10" Cursor="SizeNS"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
+                <Thumb Tag="N"  HorizontalAlignment="Stretch" VerticalAlignment="Top"    Height="10" Margin="0,0,44,0" Cursor="SizeNS"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
                 <Thumb Tag="S"  HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Height="18" Margin="12,0,12,4" Cursor="SizeNS"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
                 <Thumb Tag="W"  VerticalAlignment="Stretch"   HorizontalAlignment="Left"  Width="10" Cursor="SizeWE"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
-                <Thumb Tag="E"  VerticalAlignment="Stretch"   HorizontalAlignment="Right" Width="18" Margin="0,12,4,12" Cursor="SizeWE"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
+                <Thumb Tag="E"  VerticalAlignment="Stretch"   HorizontalAlignment="Right" Width="18" Margin="0,36,4,12" Cursor="SizeWE"   IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
                 <Thumb Tag="NW" HorizontalAlignment="Left"  VerticalAlignment="Top"    Width="24" Height="24" Cursor="SizeNWSE" IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
                 <Thumb Tag="SW" HorizontalAlignment="Left"  VerticalAlignment="Bottom" Width="24" Height="24" Cursor="SizeNESW" IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
-                <Thumb Tag="NE" HorizontalAlignment="Right" VerticalAlignment="Top"    Width="28" Height="28" Margin="0,4,4,0" Cursor="SizeNESW" IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
+                <Thumb Tag="NE" HorizontalAlignment="Right" VerticalAlignment="Top"    Width="12" Height="28" Margin="0,4,0,0" Cursor="SizeNESW" IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
                 <Thumb Tag="SE" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="28" Height="28" Margin="0,0,4,4" Cursor="SizeNWSE" IsHitTestVisible="True" DragStarted="OnResizeStarted" DragDelta="OnResize" DragCompleted="OnResizeCompleted"/>
             </Grid>
         </Grid>
