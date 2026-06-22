@@ -121,7 +121,16 @@ public partial class MainWindow : Window
             using var pen = new Pen(System.Drawing.Color.White, 2f);
             g.DrawRectangle(pen, 10, 10, 12, 12);
         }
-        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
+        var handle = bmp.GetHicon();
+        try
+        {
+            using var icon = System.Drawing.Icon.FromHandle(handle);
+            return (System.Drawing.Icon)icon.Clone();
+        }
+        finally
+        {
+            Native.User32.DestroyIcon(handle);
+        }
     }
 
     private void OnNewBox(object sender, RoutedEventArgs e) => _vm.AddBoxCommand.Execute(null);

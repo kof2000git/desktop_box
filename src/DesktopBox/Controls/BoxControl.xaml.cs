@@ -17,10 +17,15 @@ public partial class BoxControl : UserControl
     private Point _dragOrigin;
     private Point _boxOrigin;            // 拖动起始时盒子位置:用"起点+累积位移"算意图位置,不受磁吸覆盖
     private bool _isDragging;
+    private bool _isResizing;
+    private Rect _resizeBoxOrigin;
+    private double _resizeDx;
+    private double _resizeDy;
     private readonly BoxEdgeSnapState _snapX = new();
     private readonly BoxEdgeSnapState _snapY = new();
     private MainViewModel? _mainVm;
     private ILocalizerService? _localizer;
+    private BoxViewModel? _subscribedVm;
 
     private MainViewModel MainVm =>
         _mainVm ??= App.Services.GetRequiredService<MainViewModel>();
@@ -33,7 +38,12 @@ public partial class BoxControl : UserControl
         InitializeComponent();
         DataContextChanged += (_, _) =>
         {
-            if (Vm is { } vm) vm.ViewModeChanged += OnViewModeChanged;
+            if (_subscribedVm is not null)
+                _subscribedVm.ViewModeChanged -= OnViewModeChanged;
+
+            _subscribedVm = Vm;
+            if (_subscribedVm is not null)
+                _subscribedVm.ViewModeChanged += OnViewModeChanged;
         };
     }
 
@@ -96,28 +106,41 @@ public partial class BoxControl : UserControl
         MainVm.ScheduleSave();
     }
 
+    private void OnLostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (!_isDragging) return;
+        _isDragging = false;
+        MainVm.ScheduleSave();
+    }
+
     // ---- 缩放 ----
-    private void OnResize(object sender, DragDeltaEventArgs e)
+    private void OnResizeStarted(object sender, DragStartedEventArgs e)
     {
         if (Vm is null) return;
-        var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
-        double dx = e.HorizontalChange, dy = e.VerticalChange;
-        const double minW = 140, minH = 120;
+        _isResizing = true;
+        _resizeBoxOrigin = new Rect(Vm.X, Vm.Y, Vm.Width, Vm.Height);
+        _resizeDx = 0;
+        _resizeDy = 0;
+    }
 
-        if (dir.Contains('E')) Vm.Width = Math.Max(minW, Vm.Width + dx);
-        if (dir.Contains('S')) Vm.Height = Math.Max(minH, Vm.Height + dy);
-        if (dir.Contains('W'))
-        {
-            double newW = Math.Max(minW, Vm.Width - dx);
-            Vm.X += Vm.Width - newW;
-            Vm.Width = newW;
-        }
-        if (dir.Contains('N'))
-        {
-            double newH = Math.Max(minH, Vm.Height - dy);
-            Vm.Y += Vm.Height - newH;
-            Vm.Height = newH;
-        }
+    private void OnResize(object sender, DragDeltaEventArgs e)
+    {
+        if (!_isResizing || Vm is null) return;
+        var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
+        _resizeDx += e.HorizontalChange;
+        _resizeDy += e.VerticalChange;
+
+        var resized = BoxResize.Apply(_resizeBoxOrigin, dir, _resizeDx, _resizeDy);
+        Vm.X = resized.X;
+        Vm.Y = resized.Y;
+        Vm.Width = resized.Width;
+        Vm.Height = resized.Height;
+    }
+
+    private void OnResizeCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (!_isResizing) return;
+        _isResizing = false;
         MainVm.ScheduleSave();
     }
 

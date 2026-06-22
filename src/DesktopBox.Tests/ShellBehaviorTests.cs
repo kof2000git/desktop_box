@@ -104,6 +104,17 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void MainWindow_ReleasesTrayIconNativeHandle()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("GetHicon");
+        source.Should().Contain("DestroyIcon");
+        source.Should().Contain("Clone");
+    }
+
+    [Fact]
     public void DesktopIconsService_ReadsActualDesktopListViewVisibilityBeforeRegistryFallback()
     {
         var servicePath = FindRepositoryFile("src", "DesktopBox", "Services", "DesktopIconsService.cs");
@@ -143,11 +154,43 @@ public class ShellBehaviorTests
         xaml.Should().Contain("MouseLeftButtonDown=\"OnHeaderDown\"");
         xaml.Should().Contain("MouseMove=\"OnHeaderMove\"");
         xaml.Should().Contain("MouseLeftButtonUp=\"OnHeaderUp\"");
+        xaml.Should().Contain("LostMouseCapture=\"OnLostMouseCapture\"");
         xaml.Should().Contain("Height=\"10\"");
         xaml.Should().Contain("Width=\"10\"");
-        xaml.Should().Contain("Width=\"18\"");
+        xaml.Should().Contain("Tag=\"S\"");
+        xaml.Should().Contain("Height=\"18\" Margin=\"12,0,12,4\"");
+        xaml.Should().Contain("Tag=\"E\"");
+        xaml.Should().Contain("Width=\"18\" Margin=\"0,12,4,12\"");
+        xaml.Should().Contain("Tag=\"NE\"");
+        xaml.Should().Contain("Width=\"28\" Height=\"28\" Margin=\"0,4,4,0\"");
+        xaml.Should().Contain("Tag=\"SE\"");
+        xaml.Should().Contain("Width=\"28\" Height=\"28\" Margin=\"0,0,4,4\"");
+        xaml.Should().Contain("DragStarted=\"OnResizeStarted\"");
+        xaml.Should().Contain("DragCompleted=\"OnResizeCompleted\"");
         code.Should().Contain("OnHeaderMove");
+        code.Should().Contain("_resizeBoxOrigin");
+        code.Should().Contain("_resizeDx += e.HorizontalChange");
+        code.Should().Contain("_resizeDy += e.VerticalChange");
+        code.Should().Contain("_isResizing = true");
+        code.Should().Contain("if (!_isResizing || Vm is null) return");
+        code.Should().Contain("BoxResize.Apply");
+        code.Should().NotContain("PointToScreen(Mouse.GetPosition(this))");
+        code.Should().Contain("OnResizeCompleted");
         code.Should().Contain("SystemParametersHelper.ClampIntoScreens");
+        code.Should().Contain("_subscribedVm.ViewModeChanged -= OnViewModeChanged");
+    }
+
+    [Fact]
+    public void BoxControl_SavesResizeOnlyWhenDragCompletes()
+    {
+        var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
+        var code = File.ReadAllText(codePath);
+        var resizeBody = code[code.IndexOf("private void OnResize(", StringComparison.Ordinal)
+            ..code.IndexOf("private void OnResizeCompleted", StringComparison.Ordinal)];
+
+        resizeBody.Should().NotContain("ScheduleSave");
+        code.Should().Contain("private void OnResizeCompleted");
+        code.Should().Contain("MainVm.ScheduleSave()");
     }
 
     [Fact]

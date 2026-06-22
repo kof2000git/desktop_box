@@ -5,7 +5,8 @@ using Microsoft.Win32;
 namespace DesktopBox.Services;
 
 /// <summary>
-/// 控制 Windows 桌面图标显隐。读/写注册表 HideIcons 作为唯一真相来源,
+/// 控制 Windows 桌面图标显隐。优先读取 Explorer 桌面 ListView 的实际可见性,
+/// 注册表 HideIcons 仅作为兜底状态来源/持久化状态,
 /// 用 WM_COMMAND 0x7073 发给 SHELLDLL_DefView 来即时切换(实测在 Win11 26200 有效)。
 /// 不移动任何文件,纯视觉开关。
 /// </summary>
