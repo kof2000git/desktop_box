@@ -41,9 +41,7 @@ public sealed class BoxWindow : IDisposable
         _source.CompositionTarget.BackgroundColor = System.Windows.Media.Colors.Transparent;
         _content = new BoxControl
         {
-            DataContext = box,
-            Width = box.Width,
-            Height = box.Height
+            DataContext = box
         };
         _source.RootVisual = _content;
         MoveResize(Native.User32.HWND_TOP);
@@ -89,8 +87,9 @@ public sealed class BoxWindow : IDisposable
 
     private void MoveResize(IntPtr insertAfter)
     {
-        _content.Width = Box.Width;
-        _content.Height = Box.Height;
+        var scale = GetDpiScale();
+        _content.Width = Math.Max(1, Box.Width / scale.X);
+        _content.Height = Math.Max(1, Box.Height / scale.Y);
         Native.User32.SetWindowPos(
             Handle,
             insertAfter,
@@ -99,6 +98,14 @@ public sealed class BoxWindow : IDisposable
             Math.Max(1, (int)Math.Round(Box.Width)),
             Math.Max(1, (int)Math.Round(Box.Height)),
             Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
+    }
+
+    private (double X, double Y) GetDpiScale()
+    {
+        var transform = _source.CompositionTarget?.TransformToDevice ?? System.Windows.Media.Matrix.Identity;
+        var x = transform.M11 == 0 ? 1 : transform.M11;
+        var y = transform.M22 == 0 ? 1 : transform.M22;
+        return (x, y);
     }
 
     public void Dispose()

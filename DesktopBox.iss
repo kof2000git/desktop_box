@@ -3,8 +3,8 @@
 
 [Setup]
 AppName=DesktopBox
-AppVersion=1.6.7
-AppVerName=DesktopBox 1.6.4
+AppVersion=1.6.8
+AppVerName=DesktopBox 1.6.8
 AppPublisher=DesktopBox
 DefaultDirName={localappdata}\Programs\DesktopBox
 DefaultGroupName=DesktopBox

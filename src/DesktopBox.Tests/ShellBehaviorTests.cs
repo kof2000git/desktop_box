@@ -80,6 +80,17 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void BoxWindow_ConvertsModelPixelsToWpfDipForContentSize()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("TransformToDevice");
+        source.Should().Contain("Box.Width / scale.X");
+        source.Should().Contain("Box.Height / scale.Y");
+    }
+
+    [Fact]
     public void MainWindow_RepairsBoxWindowsWhenDesktopIconsVisibilityChanges()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
@@ -169,8 +180,8 @@ public class ShellBehaviorTests
         xaml.Should().Contain("DragCompleted=\"OnResizeCompleted\"");
         code.Should().Contain("OnHeaderMove");
         code.Should().Contain("_resizeBoxOrigin");
-        code.Should().Contain("_resizeDx += e.HorizontalChange");
-        code.Should().Contain("_resizeDy += e.VerticalChange");
+        code.Should().Contain("e.HorizontalChange * scale.X");
+        code.Should().Contain("e.VerticalChange * scale.Y");
         code.Should().Contain("_isResizing = true");
         code.Should().Contain("if (!_isResizing || Vm is null) return");
         code.Should().Contain("BoxResize.Apply");
@@ -178,6 +189,8 @@ public class ShellBehaviorTests
         code.Should().Contain("OnResizeCompleted");
         code.Should().Contain("SystemParametersHelper.ClampIntoScreens");
         code.Should().Contain("_subscribedVm.ViewModeChanged -= OnViewModeChanged");
+        xaml.Should().NotContain("Width=\"{Binding Width}\"");
+        xaml.Should().NotContain("Height=\"{Binding Height}\"");
     }
 
     [Fact]

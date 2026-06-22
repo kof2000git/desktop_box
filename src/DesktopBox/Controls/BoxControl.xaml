@@ -15,8 +15,8 @@
         <ctl:BoolToEyeFillConverter x:Key="BoolToEyeFill"/>
     </UserControl.Resources>
     <Border x:Name="Card"
-            Width="{Binding Width}"
-            Height="{Binding Height}"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
             CornerRadius="10"
             Background="#99000000"
             BorderBrush="#66FFFFFF"

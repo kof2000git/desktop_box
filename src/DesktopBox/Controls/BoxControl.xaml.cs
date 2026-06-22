@@ -127,8 +127,9 @@ public partial class BoxControl : UserControl
     {
         if (!_isResizing || Vm is null) return;
         var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
-        _resizeDx += e.HorizontalChange;
-        _resizeDy += e.VerticalChange;
+        var scale = GetDpiScale();
+        _resizeDx += e.HorizontalChange * scale.X;
+        _resizeDy += e.VerticalChange * scale.Y;
 
         var resized = BoxResize.Apply(_resizeBoxOrigin, dir, _resizeDx, _resizeDy);
         Vm.X = resized.X;
@@ -142,6 +143,15 @@ public partial class BoxControl : UserControl
         if (!_isResizing) return;
         _isResizing = false;
         MainVm.ScheduleSave();
+    }
+
+    private (double X, double Y) GetDpiScale()
+    {
+        var source = PresentationSource.FromVisual(this);
+        var transform = source?.CompositionTarget?.TransformToDevice ?? System.Windows.Media.Matrix.Identity;
+        var x = transform.M11 == 0 ? 1 : transform.M11;
+        var y = transform.M22 == 0 ? 1 : transform.M22;
+        return (x, y);
     }
 
     // ---- 拖放导入(归当前标签 / Items)----
