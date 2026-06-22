@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using DesktopBox.Models;
 using DesktopBox.Services;
 using DesktopBox.ViewModels;
@@ -26,12 +27,16 @@ public partial class BoxControl : UserControl
     private MainViewModel? _mainVm;
     private ILocalizerService? _localizer;
     private BoxViewModel? _subscribedVm;
+    private FirstLetterKeyboardNavigator? _keyboardNavigator;
 
     private MainViewModel MainVm =>
         _mainVm ??= App.Services.GetRequiredService<MainViewModel>();
 
     private ILocalizerService Localizer =>
         _localizer ??= App.Services.GetRequiredService<ILocalizerService>();
+
+    private FirstLetterKeyboardNavigator KeyboardNavigator =>
+        _keyboardNavigator ??= App.Services.GetRequiredService<FirstLetterKeyboardNavigator>();
 
     public BoxControl()
     {
@@ -48,6 +53,45 @@ public partial class BoxControl : UserControl
     }
 
     private BoxViewModel? Vm => DataContext as BoxViewModel;
+
+    private void OnBoxMouseEnter(object sender, MouseEventArgs e) => KeyboardNavigator.Activate(this);
+
+    private void OnBoxMouseLeave(object sender, MouseEventArgs e) => KeyboardNavigator.Deactivate(this);
+
+    public bool NavigateByFirstLetter(char key)
+    {
+        if (Vm is null || Vm.DisplayItems.Count == 0)
+            return false;
+
+        var normalized = char.ToUpperInvariant(key);
+        var currentIndex = _lastNavigationKey == normalized ? _lastNavigationIndex : -1;
+        var nextIndex = FirstLetterNavigator.FindNextIndex(Vm.DisplayItems, normalized, currentIndex);
+        if (nextIndex < 0)
+            return false;
+
+        _lastNavigationKey = normalized;
+        _lastNavigationIndex = nextIndex;
+
+        var item = Vm.DisplayItems[nextIndex];
+        MainVm.ClearSelection();
+        item.IsSelected = true;
+        ScrollItemIntoView(item);
+        return true;
+    }
+
+    private char? _lastNavigationKey;
+    private int _lastNavigationIndex = -1;
+
+    private void ScrollItemIntoView(BoxItem item)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            UpdateLayout();
+            var tile = FindVisualChildren<ItemTile>(ItemsViewport)
+                .FirstOrDefault(t => ReferenceEquals(t.DataContext, item));
+            tile?.BringIntoView();
+        }), DispatcherPriority.Loaded);
+    }
 
     /// <summary>视图模式变更:切到详细信息时惰性填充大小/修改时间。</summary>
     private void OnViewModeChanged(BoxViewModel vm)
@@ -199,6 +243,18 @@ public partial class BoxControl : UserControl
             d = System.Windows.Media.VisualTreeHelper.GetParent(d);
         }
         return null;
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is T typed)
+                yield return typed;
+            foreach (var nested in FindVisualChildren<T>(child))
+                yield return nested;
+        }
     }
 
     private void OnRename(object sender, RoutedEventArgs e)

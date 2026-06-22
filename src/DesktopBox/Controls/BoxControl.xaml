@@ -7,6 +7,8 @@
              Drop="OnDrop"
              DragOver="OnDragOver"
              LostMouseCapture="OnLostMouseCapture"
+             MouseEnter="OnBoxMouseEnter"
+             MouseLeave="OnBoxMouseLeave"
              ContextMenuOpening="OnContextMenuOpening">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolVis"/>

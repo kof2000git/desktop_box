@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Windows;
+using DesktopBox.Controls;
 using DesktopBox.Services;
 using DesktopBox.ViewModels;
 using DesktopBox.Views;
@@ -151,10 +152,18 @@ public partial class App : Application
         s.AddSingleton<ILocalizerService, LocalizerService>();
         s.AddSingleton<IDesktopIconsService, DesktopIconsService>();
         s.AddSingleton<IShellChangeNotifierService, ShellChangeNotifierService>();
+        s.AddSingleton<FirstLetterKeyboardNavigator>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();
         s.AddSingleton<MainWindow>();
         s.AddSingleton<SettingsWindow>();
         return s.BuildServiceProvider();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        (Services as IDisposable)?.Dispose();
+        _mutex?.Dispose();
+        base.OnExit(e);
     }
 }

@@ -166,6 +166,8 @@ public class ShellBehaviorTests
         xaml.Should().Contain("MouseMove=\"OnHeaderMove\"");
         xaml.Should().Contain("MouseLeftButtonUp=\"OnHeaderUp\"");
         xaml.Should().Contain("LostMouseCapture=\"OnLostMouseCapture\"");
+        xaml.Should().Contain("MouseEnter=\"OnBoxMouseEnter\"");
+        xaml.Should().Contain("MouseLeave=\"OnBoxMouseLeave\"");
         xaml.Should().Contain("Height=\"10\" Margin=\"0,0,44,0\"");
         xaml.Should().Contain("Width=\"10\"");
         xaml.Should().Contain("Tag=\"S\"");
@@ -188,9 +190,26 @@ public class ShellBehaviorTests
         code.Should().NotContain("PointToScreen(Mouse.GetPosition(this))");
         code.Should().Contain("OnResizeCompleted");
         code.Should().Contain("SystemParametersHelper.ClampIntoScreens");
+        code.Should().Contain("NavigateByFirstLetter");
+        code.Should().Contain("FirstLetterNavigator.FindNextIndex");
+        code.Should().Contain("BringIntoView");
         code.Should().Contain("_subscribedVm.ViewModeChanged -= OnViewModeChanged");
         xaml.Should().NotContain("Width=\"{Binding Width}\"");
         xaml.Should().NotContain("Height=\"{Binding Height}\"");
+    }
+
+    [Fact]
+    public void App_RegistersHoveredBoxFirstLetterKeyboardNavigator()
+    {
+        var appPath = FindRepositoryFile("src", "DesktopBox", "App.xaml.cs");
+        var app = File.ReadAllText(appPath);
+        var keyboardPath = FindRepositoryFile("src", "DesktopBox", "Controls", "FirstLetterKeyboardNavigator.cs");
+        var keyboard = File.ReadAllText(keyboardPath);
+
+        app.Should().Contain("AddSingleton<FirstLetterKeyboardNavigator>");
+        keyboard.Should().Contain("SetWindowsHookEx");
+        keyboard.Should().Contain("NavigationCharFromVirtualKey");
+        keyboard.Should().Contain("TryHandleOnUiThread");
     }
 
     [Fact]
