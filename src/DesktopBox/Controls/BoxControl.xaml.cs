@@ -201,6 +201,13 @@ public partial class BoxControl : UserControl
     // ---- 拖放导入(归当前标签 / Items)----
     private void OnDragOver(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(ItemDragDrop.DragSourceItemFormat))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.Text)
             ? DragDropEffects.Copy
             : DragDropEffects.None;
@@ -210,6 +217,12 @@ public partial class BoxControl : UserControl
     private void OnDrop(object sender, DragEventArgs e)
     {
         if (Vm is null || MainVm is null) return;
+        if (e.Data.GetDataPresent(ItemDragDrop.DragSourceItemFormat))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
 
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {

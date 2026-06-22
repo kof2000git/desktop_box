@@ -16,6 +16,8 @@ namespace DesktopBox.Controls;
 public partial class ItemTile : UserControl
 {
     private static readonly SemaphoreSlim ShellMenuGate = new(1, 1);
+    private Point _dragStart;
+    private bool _dragCandidate;
 
     /// <summary>磁贴渲染尺寸/布局(由盒子 ViewMode 决定)。变化时重排内部元素。</summary>
     public static readonly DependencyProperty IconSizeProperty =
@@ -42,14 +44,54 @@ public partial class ItemTile : UserControl
         };
         // 单击选中(普通=单选,Ctrl=多选)。不拦截双击打开(OnDoubleClick 仍触发)。
         PreviewMouseLeftButtonDown += OnTileMouseDown;
+        PreviewMouseMove += OnTileMouseMove;
+        PreviewMouseLeftButtonUp += OnTileMouseUp;
     }
 
     private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (Item is null) return;
+        _dragStart = e.GetPosition(null);
+        _dragCandidate = e.ClickCount < 2 && ItemDragDrop.CanDragAsFile(Item);
         var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
         vm.HandleTileClick(Item, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
     }
+
+    private void OnTileMouseMove(object sender, MouseEventArgs e)
+    {
+        var item = Item;
+        if (!_dragCandidate || item is null || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _dragCandidate = false;
+        var data = ItemDragDrop.CreateFileDropData(item);
+        var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
+        var boxBounds = vm.Boxes
+            .Select(b => new Rect(b.X, b.Y, b.Width, b.Height))
+            .ToList();
+
+        using var desktopDrop = DesktopDropOverlay.TryCreate(boxBounds);
+        try
+        {
+            DragDrop.DoDragDrop(this, data, DragDropEffects.Copy);
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex, "ItemTile.DragOut");
+        }
+
+        if (desktopDrop?.DroppedOnDesktop == true && ReferenceEquals(Item, item))
+            RemoveFromBox();
+        e.Handled = true;
+    }
+
+    private void OnTileMouseUp(object sender, MouseButtonEventArgs e)
+        => _dragCandidate = false;
 
     private void SetFallback()
     {

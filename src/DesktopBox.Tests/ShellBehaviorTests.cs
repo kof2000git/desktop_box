@@ -213,6 +213,45 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void ItemTile_UsesNativeFileDropAndNonBlockingDesktopOverlayForDragOut()
+    {
+        var tilePath = FindRepositoryFile("src", "DesktopBox", "Controls", "ItemTile.xaml.cs");
+        var tile = File.ReadAllText(tilePath);
+        var overlayPath = FindRepositoryFile("src", "DesktopBox", "Controls", "DesktopDropOverlay.cs");
+        var overlay = File.ReadAllText(overlayPath);
+        var dragPath = FindRepositoryFile("src", "DesktopBox", "Controls", "ItemDragDrop.cs");
+        var drag = File.ReadAllText(dragPath);
+
+        tile.Should().Contain("ItemDragDrop.CanDragAsFile");
+        tile.Should().Contain("DragDrop.DoDragDrop");
+        tile.Should().Contain("DesktopDropOverlay.TryCreate(boxBounds)");
+        tile.Should().Contain("DroppedOnDesktop");
+        tile.Should().NotContain("SetWindowPos(\r\n            boxHandle");
+        tile.Should().NotContain("HwndSource.FromVisual");
+        overlay.Should().Contain("AllowDrop = true");
+        overlay.Should().Contain("ParentWindow = parent");
+        overlay.Should().Contain("ApplyExclusionRegion");
+        overlay.Should().Contain("BuildExclusionRects");
+        overlay.Should().Contain("SetWindowRgn");
+        overlay.Should().Contain("RGN_DIFF");
+        overlay.Should().Contain("FindShellDefView");
+        overlay.Should().Contain("GetProgman");
+        drag.Should().Contain("DataFormats.FileDrop");
+    }
+
+    [Fact]
+    public void BoxControl_RejectsDesktopBoxInternalDragOutDrops()
+    {
+        var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
+        var code = File.ReadAllText(codePath);
+
+        code.Should().Contain("ItemDragDrop.DragSourceItemFormat");
+        code.Should().Contain("DragDropEffects.None");
+        code.IndexOf("ItemDragDrop.DragSourceItemFormat", StringComparison.Ordinal)
+            .Should().BeLessThan(code.IndexOf("DataFormats.FileDrop", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BoxControl_SavesResizeOnlyWhenDragCompletes()
     {
         var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
