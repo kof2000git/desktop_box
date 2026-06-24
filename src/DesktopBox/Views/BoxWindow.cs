@@ -54,6 +54,7 @@ public sealed class BoxWindow : IDisposable
 
     public IntPtr Handle => _source.Handle;
     public bool IsDisposed => _disposed;
+    public bool IsHandleAlive => !_disposed && Native.User32.IsWindow(Handle);
 
     public void EnsureVisibleOnDesktopHost(IntPtr parent)
     {

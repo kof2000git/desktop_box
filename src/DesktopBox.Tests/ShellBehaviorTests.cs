@@ -118,6 +118,19 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void MainWindow_RebuildsBoxWindowsWhenDesktopHostOrHandleIsGone()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("GetWorkerW");
+        source.Should().Contain("IsHandleAlive");
+        source.Should().Contain("RefreshDesktopLayer");
+        source.Should().Contain("SyncBoxWindows");
+        source.Should().Contain("TryGetValue");
+    }
+
+    [Fact]
     public void MainWindow_ReleasesTrayIconNativeHandle()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");

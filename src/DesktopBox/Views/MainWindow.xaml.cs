@@ -47,7 +47,7 @@ public partial class MainWindow : Window
     {
         base.OnContentRendered(e);
         Hide();
-        SyncBoxWindows();
+        RefreshDesktopLayer();
     }
 
     // 系统图标自动刷新:窗口句柄就绪后注册接收 shell 变化通知(回收站空/满切换等),
@@ -118,7 +118,6 @@ public partial class MainWindow : Window
     private void ShowBoxes()
     {
         RefreshDesktopLayer();
-        SyncBoxWindows();
     }
 
     private static System.Drawing.Icon MakeIcon()
@@ -153,7 +152,6 @@ public partial class MainWindow : Window
     {
         _vm.OrganizeCommand.Execute(null);
         RefreshDesktopLayer();
-        SyncBoxWindows();
     }
     private void OnToggleIcons(object sender, RoutedEventArgs e) => _vm.ToggleDesktopIconsCommand.Execute(null);
 
@@ -167,13 +165,13 @@ public partial class MainWindow : Window
     {
         try
         {
-            RepairBoxWindowsOnDesktopLayer();
+            RefreshDesktopLayer();
             await Task.Delay(120);
             if (Application.Current?.Dispatcher.HasShutdownStarted == true) return;
-            RepairBoxWindowsOnDesktopLayer();
+            RefreshDesktopLayer();
             await Task.Delay(450);
             if (Application.Current?.Dispatcher.HasShutdownStarted == true) return;
-            RepairBoxWindowsOnDesktopLayer();
+            RefreshDesktopLayer();
         }
         catch (Exception ex)
         {
@@ -189,7 +187,7 @@ public partial class MainWindow : Window
 
         foreach (var window in _boxWindows.Values.ToList())
         {
-            if (window.IsDisposed)
+            if (!window.IsHandleAlive)
                 continue;
 
             try
@@ -212,9 +210,14 @@ public partial class MainWindow : Window
         }
 
         if (_desktopHost == IntPtr.Zero)
+        {
+            _desktopHost = Native.User32.GetWorkerW();
+        }
+
+        if (_desktopHost == IntPtr.Zero)
             return;
 
-        RepairBoxWindowsOnDesktopLayer();
+        SyncBoxWindows();
     }
 
     private void OnBoxesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -240,7 +243,7 @@ public partial class MainWindow : Window
         var liveIds = _vm.Boxes.Select(b => b.Id).ToHashSet();
         foreach (var (id, window) in _boxWindows.ToList())
         {
-            if (!liveIds.Contains(id))
+            if (!liveIds.Contains(id) || !window.IsHandleAlive)
             {
                 _boxWindows.Remove(id);
                 window.CloseForRemoval();
@@ -255,8 +258,13 @@ public partial class MainWindow : Window
 
     private void EnsureBoxWindow(BoxViewModel box)
     {
-        if (_boxWindows.ContainsKey(box.Id))
-            return;
+        if (_boxWindows.TryGetValue(box.Id, out var existing))
+        {
+            if (existing.IsHandleAlive)
+                return;
+
+            _boxWindows.Remove(box.Id);
+        }
 
         var host = GetDesktopHost();
         if (host == IntPtr.Zero)
