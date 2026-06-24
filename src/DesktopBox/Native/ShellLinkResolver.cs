@@ -1,64 +1,44 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace DesktopBox.Native;
 
-/// <summary>解析 .lnk 快捷方式指向的目标路径(IShellLinkW + IPersistFile)。
+/// <summary>解析 .lnk 快捷方式指向的目标路径(WScript.Shell)。
 /// 用于"在资源管理器中显示"定位到快捷方式目标本身,而非 .lnk 所在的桌面。</summary>
 public static class ShellLinkResolver
 {
     public static string? ResolveTarget(string lnkPath)
     {
-        object? sl = null;
         try
         {
             if (!File.Exists(lnkPath)) return null;
-            sl = new CShellLink();
-            ((IPersistFile)sl).Load(lnkPath, 0);   // STGM_READ = 0
-            var sb = new StringBuilder(260);
-            ((IShellLinkW)sl).GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
-            return sb.Length > 0 ? sb.ToString() : null;
+            var type = Type.GetTypeFromProgID("WScript.Shell");
+            if (type is null) return null;
+            dynamic shell = Activator.CreateInstance(type)!;
+            dynamic sc = shell.CreateShortcut(lnkPath);
+            var target = (string?)sc.TargetPath;
+            return string.IsNullOrWhiteSpace(target) ? null : target;
         }
         catch { return null; }
-        finally
+    }
+
+    public static (string? iconPath, int iconIndex) ResolveIconLocation(string lnkPath)
+    {
+        try
         {
-            if (sl is not null)
-                try { Marshal.ReleaseComObject(sl); } catch { }
+            if (!File.Exists(lnkPath)) return (null, -1);
+            var type = Type.GetTypeFromProgID("WScript.Shell");
+            if (type is null) return (null, -1);
+            dynamic shell = Activator.CreateInstance(type)!;
+            dynamic sc = shell.CreateShortcut(lnkPath);
+            var raw = (string?)sc.IconLocation;
+            if (string.IsNullOrWhiteSpace(raw)) return (null, -1);
+
+            var parts = raw.Split(',', 2, StringSplitOptions.TrimEntries);
+            var iconPath = Environment.ExpandEnvironmentVariables(parts[0].Trim().Trim('"'));
+            var iconIndex = parts.Length > 1 && int.TryParse(parts[1], out var idx) ? idx : 0;
+            return (iconPath, iconIndex);
         }
+        catch { return (null, -1); }
     }
-
-    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IShellLinkW
-    {
-        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cch, IntPtr pfd, uint fFlags);
-        void GetIDList(out IntPtr ppidl);
-        void SetIDList(IntPtr pidl);
-        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cch);
-        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
-        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cch);
-        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
-        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cch);
-        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
-        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cch, out int piIcon);
-        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
-        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
-        void Resolve(IntPtr hwnd, uint fFlags);
-        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
-    }
-
-    [ComImport, Guid("0000010B-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IPersistFile
-    {
-        void GetClassID(out Guid pClassID);
-        void IsDirty();
-        void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
-        void Save([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, [MarshalAs(UnmanagedType.Bool)] bool fRemember);
-        void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
-        void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
-    }
-
-    [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
-    private class CShellLink { }
 }

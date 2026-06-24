@@ -19,6 +19,10 @@ public static class Shell32
     public static extern IntPtr SHGetFileInfoByPidl(IntPtr pidl, uint dwFileAttributes,
         ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "ExtractIconExW")]
+    public static extern uint ExtractIconEx(string lpszFile, int nIconIndex,
+        out IntPtr phiconLarge, out IntPtr phiconSmall, uint nIcons);
+
     /// <summary>把解析名(如 ::{CLSID})解析为 PIDL。成功返回 0。</summary>
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern int SHParseDisplayName(

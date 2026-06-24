@@ -2,6 +2,9 @@ using DesktopBox.Native;
 using DesktopBox.Services;
 using FluentAssertions;
 using System.IO;
+using System.Runtime.ExceptionServices;
+using System.Threading;
+using System.Windows.Threading;
 
 namespace DesktopBox.Tests;
 
@@ -284,6 +287,57 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void IconExtractorService_ResolvesShortcutIconLocationBeforeFallbackingToLnk()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Services", "IconExtractorService.cs");
+        var source = File.ReadAllText(sourcePath);
+        var resolverPath = FindRepositoryFile("src", "DesktopBox", "Native", "ShellLinkResolver.cs");
+        var resolver = File.ReadAllText(resolverPath);
+
+        source.Should().Contain("ExtractShortcutIcon");
+        source.Should().Contain("ResolveIconLocation");
+        source.Should().Contain("ExtractIconResource");
+        source.Should().Contain("ResolveTarget(lnkPath)");
+        source.Should().Contain("ExtractPathIcon(lnkPath");
+        resolver.Should().Contain("IconLocation");
+        resolver.Should().Contain("WScript.Shell");
+    }
+
+    [Fact]
+    public void IconExtractorService_CanExtractIconFromShortcutIconLocation()
+    {
+        RunOnSta(() =>
+        {
+            var tempDir = Directory.CreateTempSubdirectory("dbx_").FullName;
+            try
+            {
+                var targetPath = Path.Combine(tempDir, "target.txt");
+                File.WriteAllText(targetPath, "x");
+
+                var shortcutPath = Path.Combine(tempDir, "shortcut.lnk");
+                var iconSource = Path.Combine(Environment.SystemDirectory, "shell32.dll");
+                CreateShortcut(shortcutPath, targetPath, iconSource, 3);
+
+                var resolved = ShellLinkResolver.ResolveIconLocation(shortcutPath);
+                resolved.iconPath.Should().NotBeNull();
+                resolved.iconPath!.Should().EndWith("shell32.dll");
+                resolved.iconIndex.Should().Be(3);
+
+                var extractor = new IconExtractorService();
+                var png = extractor.Extract(shortcutPath);
+
+                png.Should().NotBeNull();
+                File.Exists(png!).Should().BeTrue();
+                new FileInfo(png!).Length.Should().BeGreaterThan(0);
+            }
+            finally
+            {
+                Directory.Delete(tempDir, true);
+            }
+        });
+    }
+
+    [Fact]
     public void ShellChangeNotifierCanReRegisterAfterTaskbarRestart()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Services", "ShellChangeNotifierService.cs");
@@ -376,5 +430,42 @@ public class ShellBehaviorTests
 
     private static string? GetItemMetadata(System.Xml.Linq.XElement item, string name) =>
         item.Attribute(name)?.Value ?? item.Element(name)?.Value;
+
+    private static void CreateShortcut(string shortcutPath, string targetPath, string iconSource, int iconIndex)
+    {
+        var shellType = Type.GetTypeFromProgID("WScript.Shell");
+        shellType.Should().NotBeNull("WScript.Shell should be available on Windows");
+
+        dynamic shell = Activator.CreateInstance(shellType!)!;
+        dynamic shortcut = shell.CreateShortcut(shortcutPath);
+        shortcut.TargetPath = targetPath;
+        shortcut.WorkingDirectory = Path.GetDirectoryName(targetPath);
+        shortcut.IconLocation = $"{iconSource},{iconIndex}";
+        shortcut.Save();
+    }
+
+    private static void RunOnSta(Action action)
+    {
+        ExceptionDispatchInfo? exception = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                exception = ExceptionDispatchInfo.Capture(ex);
+            }
+            finally
+            {
+                Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        exception?.Throw();
+    }
 
 }

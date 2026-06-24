@@ -29,28 +29,131 @@ public class IconExtractorService : IIconExtractorService
 
             if (targetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
 
-            var stamp = "0";
-            try { if (File.Exists(targetPath) || Directory.Exists(targetPath)) stamp = File.GetLastWriteTimeUtc(targetPath).Ticks.ToString(); } catch { }
-            var key = StableKey(targetPath.ToLowerInvariant() + "|" + stamp);
+            if (targetPath.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            {
+                var shortcutIcon = ExtractShortcutIcon(targetPath, forceRefresh);
+                if (!string.IsNullOrEmpty(shortcutIcon))
+                    return shortcutIcon;
+            }
+
+            return ExtractPathIcon(targetPath, forceRefresh);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string? ExtractPathIcon(string targetPath, bool forceRefresh)
+    {
+        var stamp = "0";
+        try { if (File.Exists(targetPath) || Directory.Exists(targetPath)) stamp = File.GetLastWriteTimeUtc(targetPath).Ticks.ToString(); } catch { }
+        var key = StableKey(targetPath.ToLowerInvariant() + "|" + stamp);
+        var png = Path.Combine(CacheDir, key + ".png");
+        if (forceRefresh)
+        {
+            try { if (File.Exists(png)) File.Delete(png); } catch { }
+        }
+        if (File.Exists(png)) return png;
+
+        var info = new Shell32.SHFILEINFO();
+        var size = (uint)Marshal.SizeOf<Shell32.SHFILEINFO>();
+        Shell32.SHGetFileInfo(targetPath, 0, ref info, size, Shell32.SHGFI_ICON | Shell32.SHGFI_LARGEICON);
+        if (info.hIcon == IntPtr.Zero) return null;
+
+        try
+        {
+            using var icon = Icon.FromHandle(info.hIcon);
+            using var bmp = icon.ToBitmap();
+            bmp.Save(png, ImageFormat.Png);
+        }
+        finally
+        {
+            User32.DestroyIcon(info.hIcon);
+        }
+        return png;
+    }
+
+    private string? ExtractShortcutIcon(string lnkPath, bool forceRefresh = false)
+    {
+        try
+        {
+            var (iconPath, iconIndex) = ShellLinkResolver.ResolveIconLocation(lnkPath);
+            if (!string.IsNullOrWhiteSpace(iconPath))
+            {
+                iconPath = Environment.ExpandEnvironmentVariables(iconPath.Trim().Trim('"'));
+                if (!iconPath.StartsWith("::", StringComparison.Ordinal) && !Path.IsPathRooted(iconPath))
+                {
+                    var shortcutDir = Path.GetDirectoryName(lnkPath);
+                    if (!string.IsNullOrWhiteSpace(shortcutDir))
+                        iconPath = Path.GetFullPath(Path.Combine(shortcutDir, iconPath));
+                }
+
+                if (iconPath.StartsWith("::", StringComparison.Ordinal))
+                {
+                    var systemIcon = Extract(iconPath, forceRefresh);
+                    if (!string.IsNullOrEmpty(systemIcon))
+                        return systemIcon;
+                }
+                else
+                {
+                    var resourceIcon = ExtractIconResource(iconPath, iconIndex, forceRefresh);
+                    if (!string.IsNullOrEmpty(resourceIcon))
+                        return resourceIcon;
+                }
+            }
+
+            var targetPath = ShellLinkResolver.ResolveTarget(lnkPath);
+            if (!string.IsNullOrWhiteSpace(targetPath))
+            {
+                var targetIcon = ExtractPathIcon(targetPath, forceRefresh);
+                if (!string.IsNullOrEmpty(targetIcon))
+                    return targetIcon;
+            }
+
+            return ExtractPathIcon(lnkPath, forceRefresh);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string? ExtractIconResource(string iconPath, int iconIndex, bool forceRefresh)
+    {
+        try
+        {
+            if (!File.Exists(iconPath))
+                return null;
+
+            var iconStamp = "0";
+            try { iconStamp = File.GetLastWriteTimeUtc(iconPath).Ticks.ToString(); } catch { }
+            var key = StableKey("lnk|" + iconPath.ToLowerInvariant() + "|" + iconIndex + "|" + iconStamp);
             var png = Path.Combine(CacheDir, key + ".png");
-            if (File.Exists(png)) return png;
+            if (forceRefresh)
+            {
+                try { if (File.Exists(png)) File.Delete(png); } catch { }
+            }
+            if (File.Exists(png) && !forceRefresh) return png;
 
-            var info = new Shell32.SHFILEINFO();
-            var size = (uint)Marshal.SizeOf<Shell32.SHFILEINFO>();
-            Shell32.SHGetFileInfo(targetPath, 0, ref info, size, Shell32.SHGFI_ICON | Shell32.SHGFI_LARGEICON);
-            if (info.hIcon == IntPtr.Zero) return null;
-
+            var large = IntPtr.Zero;
+            var small = IntPtr.Zero;
             try
             {
-                using var icon = Icon.FromHandle(info.hIcon);
+                var count = Shell32.ExtractIconEx(iconPath, iconIndex, out large, out small, 1);
+                var hIcon = large != IntPtr.Zero ? large : small;
+                if (count == 0 || hIcon == IntPtr.Zero)
+                    return null;
+                using var icon = Icon.FromHandle(hIcon);
                 using var bmp = icon.ToBitmap();
                 bmp.Save(png, ImageFormat.Png);
+                return png;
             }
             finally
             {
-                User32.DestroyIcon(info.hIcon);
+                if (large != IntPtr.Zero) User32.DestroyIcon(large);
+                if (small != IntPtr.Zero) User32.DestroyIcon(small);
             }
-            return png;
         }
         catch
         {
