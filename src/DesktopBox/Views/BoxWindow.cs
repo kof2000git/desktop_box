@@ -17,6 +17,7 @@ public sealed class BoxWindow : IDisposable
     private const int WS_EX_LAYERED = 0x00080000;
 
     private readonly HwndSource _source;
+    private readonly IntPtr _handle;
     private readonly BoxControl _content;
     private bool _disposed;
 
@@ -38,6 +39,8 @@ public sealed class BoxWindow : IDisposable
         };
 
         _source = new HwndSource(parameters);
+        _handle = _source.Handle;
+        _source.Disposed += OnSourceDisposed;
         _source.CompositionTarget.BackgroundColor = System.Windows.Media.Colors.Transparent;
         _content = new BoxControl
         {
@@ -52,20 +55,20 @@ public sealed class BoxWindow : IDisposable
 
     public BoxViewModel Box { get; }
 
-    public IntPtr Handle => _source.Handle;
+    public IntPtr Handle => _disposed || _source.IsDisposed ? IntPtr.Zero : _handle;
     public bool IsDisposed => _disposed;
-    public bool IsHandleAlive => !_disposed && Native.User32.IsWindow(Handle);
+    public bool IsHandleAlive => !_disposed && !_source.IsDisposed && Native.User32.IsWindow(_handle);
 
     public void EnsureVisibleOnDesktopHost(IntPtr parent)
     {
-        if (_disposed || parent == IntPtr.Zero)
+        if (_disposed || _source.IsDisposed || parent == IntPtr.Zero)
             return;
 
-        if (Native.User32.GetParent(Handle) != parent)
-            Native.User32.SetParent(Handle, parent);
+        if (Native.User32.GetParent(_handle) != parent)
+            Native.User32.SetParent(_handle, parent);
 
         Native.User32.SetWindowPos(
-            Handle,
+            _handle,
             Native.User32.HWND_TOP,
             (int)Math.Round(Box.X),
             (int)Math.Round(Box.Y),
@@ -78,22 +81,25 @@ public sealed class BoxWindow : IDisposable
 
     private void OnBoxPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_disposed)
+        if (_disposed || _source.IsDisposed)
             return;
 
         if (e.PropertyName is nameof(BoxViewModel.X) or nameof(BoxViewModel.Y) or nameof(BoxViewModel.Width) or nameof(BoxViewModel.Height))
             MoveResize(Native.User32.HWND_TOP);
         else if (e.PropertyName == nameof(BoxViewModel.Header))
-            Native.User32.SetWindowText(Handle, Box.Header);
+            Native.User32.SetWindowText(_handle, Box.Header);
     }
 
     private void MoveResize(IntPtr insertAfter)
     {
+        if (_disposed || _source.IsDisposed)
+            return;
+
         var scale = GetDpiScale();
         _content.Width = Math.Max(1, Box.Width / scale.X);
         _content.Height = Math.Max(1, Box.Height / scale.Y);
         Native.User32.SetWindowPos(
-            Handle,
+            _handle,
             insertAfter,
             (int)Math.Round(Box.X),
             (int)Math.Round(Box.Y),
@@ -115,9 +121,20 @@ public sealed class BoxWindow : IDisposable
         if (_disposed)
             return;
 
-        _disposed = true;
-        Box.PropertyChanged -= OnBoxPropertyChanged;
+        MarkDisposed();
+        _source.Disposed -= OnSourceDisposed;
         _source.RootVisual = null;
         _source.Dispose();
+    }
+
+    private void OnSourceDisposed(object? sender, EventArgs e) => MarkDisposed();
+
+    private void MarkDisposed()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        Box.PropertyChanged -= OnBoxPropertyChanged;
     }
 }

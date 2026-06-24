@@ -59,6 +59,20 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void BoxWindow_GuardsDisposedHwndSourceBeforeTouchingHandle()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("private readonly IntPtr _handle;");
+        source.Should().Contain("_source.Disposed += OnSourceDisposed");
+        source.Should().Contain("public IntPtr Handle => _disposed || _source.IsDisposed ? IntPtr.Zero : _handle;");
+        source.Should().Contain("public bool IsHandleAlive => !_disposed && !_source.IsDisposed && Native.User32.IsWindow(_handle);");
+        source.Should().Contain("if (_disposed || _source.IsDisposed)");
+        source.Should().Contain("private void MarkDisposed()");
+    }
+
+    [Fact]
     public void BoxWindow_CanRepairHostAndChildZOrderAfterDesktopIconsToggle()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs");
