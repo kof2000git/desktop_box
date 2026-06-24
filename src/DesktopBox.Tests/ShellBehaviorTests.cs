@@ -274,6 +274,30 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void MainWindow_DoesNotUseSystemWideMinimizeAllToShowBoxes()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().NotContain("MinimizeAll");
+        source.Should().Contain("RefreshDesktopLayer");
+    }
+
+    [Fact]
+    public void ShellChangeNotifierCanReRegisterAfterTaskbarRestart()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Services", "ShellChangeNotifierService.cs");
+        var source = File.ReadAllText(sourcePath);
+        var ifacePath = FindRepositoryFile("src", "DesktopBox", "Services", "IShellChangeNotifierService.cs");
+        var iface = File.ReadAllText(ifacePath);
+
+        source.Should().Contain("Register(IntPtr hwnd, bool force = false)");
+        source.Should().Contain("SHChangeNotifyDeregister");
+        source.Should().Contain("force");
+        iface.Should().Contain("bool force = false");
+    }
+
+    [Fact]
     public void NativeShellMenu_SetsExplorerCompatibleClipboardForCutAndCopy()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");

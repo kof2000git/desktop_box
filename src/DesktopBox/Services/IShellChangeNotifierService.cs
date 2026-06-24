@@ -7,7 +7,7 @@ namespace DesktopBox.Services;
 public interface IShellChangeNotifierService
 {
     /// <summary>注册窗口(HWND)接收 shell 变化通知。返回是否成功。</summary>
-    bool Register(IntPtr hwnd);
+    bool Register(IntPtr hwnd, bool force = false);
 
     /// <summary>MainWindow 收到注册时的自定义消息号后,调此方法解析通知内容。</summary>
     /// <param name="wParam">消息 wParam</param>

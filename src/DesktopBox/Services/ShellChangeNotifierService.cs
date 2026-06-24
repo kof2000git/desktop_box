@@ -32,9 +32,15 @@ public class ShellChangeNotifierService : IShellChangeNotifierService
                                              | Shell32.SHCNE_UPDATEITEM | Shell32.SHCNE_UPDATEDIR
                                              | Shell32.SHCNE_RMDIR;
 
-    public bool Register(IntPtr hwnd)
+    public bool Register(IntPtr hwnd, bool force = false)
     {
-        if (_registered) return true;
+        if (_registered && !force) return true;
+        if (force && _registered && _notifyId != 0)
+        {
+            try { Shell32.SHChangeNotifyDeregister(_notifyId); } catch { }
+            _notifyId = 0;
+            _registered = false;
+        }
         if (hwnd == IntPtr.Zero) return false;
 
         // 文件级事件:用于清理盒子中已失效的条目(用户在资源管理器删桌面文件后盒子同步)。

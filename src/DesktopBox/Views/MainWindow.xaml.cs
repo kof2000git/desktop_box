@@ -16,6 +16,7 @@ namespace DesktopBox.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly uint _taskbarCreatedMessage = Native.User32.RegisterWindowMessage("TaskbarCreated");
     private readonly MainViewModel _vm;
     private readonly SettingsWindow _settings;
     private readonly ILocalizerService _localizer;
@@ -62,6 +63,16 @@ public partial class MainWindow : Window
             var notifier = App.Services.GetRequiredService<IShellChangeNotifierService>();
             src.AddHook((IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
             {
+                if ((uint)msg == _taskbarCreatedMessage)
+                {
+                    _desktopHost = IntPtr.Zero;
+                    try { notifier.Register(hwnd, force: true); } catch (Exception ex) { App.LogError(ex, "MainWindow.ReRegisterShellNotify"); }
+                    RestoreTrayIcon();
+                    RefreshDesktopLayer();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
                 if (notifier.NotifyMessageId != 0 && (uint)msg == notifier.NotifyMessageId)
                 {
                     notifier.OnShellNotify(wParam, lParam);
@@ -106,7 +117,7 @@ public partial class MainWindow : Window
 
     private void ShowBoxes()
     {
-        ShowDesktopLayer();
+        RefreshDesktopLayer();
         SyncBoxWindows();
     }
 
@@ -141,7 +152,7 @@ public partial class MainWindow : Window
     private void OrganizeAndShowBoxes()
     {
         _vm.OrganizeCommand.Execute(null);
-        ShowDesktopLayer();
+        RefreshDesktopLayer();
         SyncBoxWindows();
     }
     private void OnToggleIcons(object sender, RoutedEventArgs e) => _vm.ToggleDesktopIconsCommand.Execute(null);
@@ -176,21 +187,34 @@ public partial class MainWindow : Window
         if (host == IntPtr.Zero)
             return;
 
-        foreach (var window in _boxWindows.Values)
-            window.EnsureVisibleOnDesktopHost(host);
+        foreach (var window in _boxWindows.Values.ToList())
+        {
+            if (window.IsDisposed)
+                continue;
+
+            try
+            {
+                window.EnsureVisibleOnDesktopHost(host);
+            }
+            catch (Exception ex)
+            {
+                App.LogError(ex, "MainWindow.RepairBoxWindowsOnDesktopLayer");
+            }
+        }
     }
 
-    private static void ShowDesktopLayer()
+    private void RefreshDesktopLayer()
     {
-        try
+        _desktopHost = Native.User32.FindShellDefView();
+        if (_desktopHost == IntPtr.Zero)
         {
-            var shellType = Type.GetTypeFromProgID("Shell.Application");
-            if (shellType is null) return;
-
-            var shell = Activator.CreateInstance(shellType);
-            shellType.InvokeMember("MinimizeAll", System.Reflection.BindingFlags.InvokeMethod, null, shell, Array.Empty<object>());
+            _desktopHost = Native.User32.GetProgman();
         }
-        catch { }
+
+        if (_desktopHost == IntPtr.Zero)
+            return;
+
+        RepairBoxWindowsOnDesktopLayer();
     }
 
     private void OnBoxesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -225,6 +249,8 @@ public partial class MainWindow : Window
 
         foreach (var box in _vm.Boxes)
             EnsureBoxWindow(box);
+
+        RepairBoxWindowsOnDesktopLayer();
     }
 
     private void EnsureBoxWindow(BoxViewModel box)
@@ -236,8 +262,15 @@ public partial class MainWindow : Window
         if (host == IntPtr.Zero)
             return;
 
-        var window = new BoxWindow(box, _vm, host);
-        _boxWindows[box.Id] = window;
+        try
+        {
+            var window = new BoxWindow(box, _vm, host);
+            _boxWindows[box.Id] = window;
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex, "MainWindow.EnsureBoxWindow");
+        }
     }
 
     private IntPtr GetDesktopHost(bool refresh = false)
@@ -248,7 +281,25 @@ public partial class MainWindow : Window
         _desktopHost = Native.User32.FindShellDefView();
         if (_desktopHost == IntPtr.Zero)
             _desktopHost = Native.User32.GetProgman();
+        if (_desktopHost == IntPtr.Zero)
+            _desktopHost = Native.User32.GetWorkerW();
         return _desktopHost;
+    }
+
+    private void RestoreTrayIcon()
+    {
+        if (_tray is null) return;
+
+        try
+        {
+            _tray.Visible = false;
+            _tray.Visible = true;
+            RebuildTrayMenu();
+        }
+        catch (Exception ex)
+        {
+            App.LogError(ex, "MainWindow.RestoreTrayIcon");
+        }
     }
 
     private void OnOpenSettings(object? sender, RoutedEventArgs? e)

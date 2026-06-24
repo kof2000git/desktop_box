@@ -53,6 +53,7 @@ public sealed class BoxWindow : IDisposable
     public BoxViewModel Box { get; }
 
     public IntPtr Handle => _source.Handle;
+    public bool IsDisposed => _disposed;
 
     public void EnsureVisibleOnDesktopHost(IntPtr parent)
     {
