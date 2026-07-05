@@ -24,6 +24,9 @@ public partial class MainViewModel : ObservableObject
     private readonly IDesktopIconsService _desktopIcons;
     private readonly ILocalizerService _localizer;
     private Timer? _debounce;
+    private readonly object _systemIconRefreshGate = new();
+    private bool _systemIconRefreshRunning;
+    private List<BoxItem>? _pendingSystemIconRefreshItems;
 
     public ObservableCollection<BoxViewModel> Boxes { get; } = new();
 
@@ -621,7 +624,25 @@ public partial class MainViewModel : ObservableObject
     /// 重新提取所有系统图标(回收站空/满、此电脑盘符等状态会变)。forceRefresh=true 强制删旧缓存。</summary>
     private void RefreshSystemIcons()
     {
-        // 跨所有盒子 + 标签收集系统图标(TargetPath 以 :: 开头)
+        var sysItems = CollectSystemIconItems();
+        if (sysItems.Count == 0) return;
+
+        lock (_systemIconRefreshGate)
+        {
+            if (_systemIconRefreshRunning)
+            {
+                _pendingSystemIconRefreshItems = sysItems;
+                return;
+            }
+
+            _systemIconRefreshRunning = true;
+        }
+
+        Task.Run(() => RefreshSystemIconsLoop(sysItems));
+    }
+
+    private List<BoxItem> CollectSystemIconItems()
+    {
         var sysItems = new List<BoxItem>();
         foreach (var b in Boxes)
         {
@@ -632,22 +653,53 @@ public partial class MainViewModel : ObservableObject
                     sysItems.Add(it);
             }
         }
-        if (sysItems.Count == 0) return;
+        return sysItems;
+    }
 
-        Task.Run(() =>
+    private void RefreshSystemIconsLoop(List<BoxItem> initialItems)
+    {
+        var currentItems = initialItems;
+        while (true)
         {
-            foreach (var it in sysItems)
+            RefreshSystemIconSnapshot(currentItems);
+
+            lock (_systemIconRefreshGate)
             {
-                try
+                if (_pendingSystemIconRefreshItems is null)
                 {
-                    var icon = _icon.Extract(it.TargetPath, forceRefresh: true);
-                    var disp = Application.Current?.Dispatcher;
-                    if (disp is null || disp.HasShutdownStarted) continue;
-                    disp.BeginInvoke(new Action(() => it.IconCachePath = icon));
+                    _systemIconRefreshRunning = false;
+                    return;
                 }
-                catch (Exception ex) { App.LogError(ex, "RefreshSystemIcons.Extract"); }
+
+                currentItems = _pendingSystemIconRefreshItems;
+                _pendingSystemIconRefreshItems = null;
             }
-        });
+        }
+    }
+
+    private void RefreshSystemIconSnapshot(List<BoxItem> sysItems)
+    {
+        var targets = sysItems
+            .GroupBy(i => i.TargetPath, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new { TargetPath = g.Key, Items = g.ToList() })
+            .ToList();
+
+        foreach (var target in targets)
+        {
+            try
+            {
+                var icon = _icon.Extract(target.TargetPath, forceRefresh: true);
+                var disp = Application.Current?.Dispatcher;
+                if (disp is null || disp.HasShutdownStarted) continue;
+                var affected = target.Items;
+                disp.BeginInvoke(new Action(() =>
+                {
+                    foreach (var it in affected)
+                        it.IconCachePath = icon;
+                }));
+            }
+            catch (Exception ex) { App.LogError(ex, "RefreshSystemIcons.Extract"); }
+        }
     }
 
     /// <summary>为详细信息视图惰性填充每个条目的大小/修改时间(后台线程,逐个回 UI 更新)。</summary>

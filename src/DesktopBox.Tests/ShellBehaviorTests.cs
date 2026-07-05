@@ -409,6 +409,27 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void NativeShellMenu_UninitializesComOnTheMenuThread()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)");
+        source.Should().Contain("const bool coInitialized = SUCCEEDED(hrCo)");
+        source.Should().Contain("if (coInitialized) CoUninitialize();");
+    }
+
+    [Fact]
+    public void NativeShellMenu_UsesThreadLocalContextMenuPointers()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("static thread_local IContextMenu3* g_cm3");
+        source.Should().Contain("static thread_local IContextMenu2* g_cm2");
+    }
+
+    [Fact]
     public async Task StaTaskRunner_DoesNotBlockCallerWhileWorkRuns()
     {
         using var started = new ManualResetEventSlim();

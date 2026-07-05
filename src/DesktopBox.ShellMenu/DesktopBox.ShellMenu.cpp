@@ -15,8 +15,8 @@
 // Unicode build still sees CFSTR_PREFERREDDROPEFFECT as a narrow SDK macro here.
 static const wchar_t* kPreferredDropEffectFormat = L"Preferred DropEffect";
 static const wchar_t* kMenuWndClass = L"DesktopBox_ShellMenuHook_4F8A";
-static IContextMenu3* g_cm3 = nullptr;
-static IContextMenu2* g_cm2 = nullptr;
+static thread_local IContextMenu3* g_cm3 = nullptr;
+static thread_local IContextMenu2* g_cm2 = nullptr;
 
 static bool EqualsVerb(const wchar_t* actual, const wchar_t* expected) {
     return actual && _wcsicmp(actual, expected) == 0;
@@ -153,6 +153,8 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
 
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     { char buf[80]; sprintf_s(buf, "CoInitializeEx hr=0x%lX", (unsigned long)hrCo); DbgLog(buf); }
+    const bool coInitialized = SUCCEEDED(hrCo);
+    if (FAILED(hrCo)) return 0;
 
     int result = 0;
     PIDLIST_ABSOLUTE pidl = nullptr;
@@ -236,6 +238,7 @@ cleanup:
     if (parent) parent->Release();
     if (pidl) ILFree(pidl);
     DbgLog("=== end ===");
+    if (coInitialized) CoUninitialize();
     return result;
 }
 

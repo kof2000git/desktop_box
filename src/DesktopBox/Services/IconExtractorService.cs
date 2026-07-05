@@ -13,6 +13,7 @@ namespace DesktopBox.Services;
 public class IconExtractorService : IIconExtractorService
 {
     private static readonly string CacheDir = AppPaths.IconCacheDir;
+    private static readonly object SystemIconCacheGate = new();
 
     public string? Extract(string targetPath) => Extract(targetPath, forceRefresh: false);
 
@@ -163,36 +164,57 @@ public class IconExtractorService : IIconExtractorService
 
     private string? ExtractSystemIcon(string clsidPath, bool forceRefresh = false)
     {
-        var key = StableKey("sys|" + clsidPath);
-        var png = Path.Combine(CacheDir, key + ".png");
-        // 系统图标(回收站空/满、此电脑盘符)的状态会变化,但缓存 key 不含时间戳,
-        // 默认命中缓存即返回旧图。forceRefresh=true 时删旧缓存强制重新提取当前状态。
-        if (forceRefresh)
+        lock (SystemIconCacheGate)
         {
-            // 删掉这个 key 的所有旧缓存(基础名 + 历次时间戳名),避免累积
-            try { foreach (var f in Directory.GetFiles(CacheDir, key + "*.png")) File.Delete(f); } catch { }
+            var key = StableKey("sys|" + clsidPath);
+            var png = Path.Combine(CacheDir, key + ".png");
+            // 系统图标(回收站空/满、此电脑盘符)的状态会变化,但缓存 key 不含时间戳,
+            // 默认命中缓存即返回旧图。forceRefresh=true 时删旧缓存强制重新提取当前状态。
+            if (!forceRefresh && File.Exists(png))
+            {
+                DeleteSystemIconCacheFiles(key, keepPath: png);
+                return png;
+            }
+
+            // forceRefresh 路径:重新提取后用带时间戳的文件名返回,确保 IconCachePath 值变化——
+            // 否则 png 文件内容变了但路径不变,WPF Image 会复用缓存的 BitmapImage 不重绘(回收站图标不更新)。
+            var target = forceRefresh
+                ? Path.Combine(CacheDir, key + "_" + DateTime.UtcNow.Ticks + ".png")
+                : png;
+
+            if (forceRefresh) DeleteSystemIconCacheFiles(key, keepPath: null);
+
+            // SHGetImageList 返回系统图像列表的 COM 接口,必须在 STA 单元调用。
+            // 本方法由 Task.Run 线程池调用,线程池是 MTA 且无法用 CoInitializeEx(STA) 重初始化
+            // (RPC_E_CHANGED_MODE),MTA 下 SHGetImageList 直接返回 E_NOINTERFACE → 图标提取全失败。
+            // 解决:起一个专用 STA 线程跑提取,阻塞等待结果(CLR 会自动为它初始化 STA)。
+            try
+            {
+                var extracted = StaTaskRunner.RunSync(() => ExtractSystemIconCore(clsidPath, target));
+                if (!string.IsNullOrEmpty(extracted))
+                    DeleteSystemIconCacheFiles(key, keepPath: extracted);
+                return extracted;
+            }
+            catch (Exception ex)
+            {
+                App.LogError(ex, "ExtractSystemIcon.STA");
+                return null;
+            }
         }
-        if (File.Exists(png) && !forceRefresh) return png;
+    }
 
-        // forceRefresh 路径:重新提取后用带时间戳的文件名返回,确保 IconCachePath 值变化——
-        // 否则 png 文件内容变了但路径不变,WPF Image 会复用缓存的 BitmapImage 不重绘(回收站图标不更新)。
-        var stamp = DateTime.UtcNow.Ticks;
-        var pngRefresh = forceRefresh ? Path.Combine(CacheDir, key + "_" + stamp + ".png") : png;
-        var target = forceRefresh ? pngRefresh : png;
-
-        // SHGetImageList 返回系统图像列表的 COM 接口,必须在 STA 单元调用。
-        // 本方法由 Task.Run 线程池调用,线程池是 MTA 且无法用 CoInitializeEx(STA) 重初始化
-        // (RPC_E_CHANGED_MODE),MTA 下 SHGetImageList 直接返回 E_NOINTERFACE → 图标提取全失败。
-        // 解决:起一个专用 STA 线程跑提取,阻塞等待结果(CLR 会自动为它初始化 STA)。
+    private static void DeleteSystemIconCacheFiles(string key, string? keepPath)
+    {
         try
         {
-            return StaTaskRunner.RunSync(() => ExtractSystemIconCore(clsidPath, target));
+            foreach (var file in Directory.GetFiles(CacheDir, key + "*.png"))
+            {
+                if (keepPath is not null && string.Equals(file, keepPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                try { File.Delete(file); } catch { }
+            }
         }
-        catch (Exception ex)
-        {
-            App.LogError(ex, "ExtractSystemIcon.STA");
-            return null;
-        }
+        catch { }
     }
 
     /// <summary>在 STA 线程上执行真正的图标提取。用 SHGFI_ICON 直接拿 hIcon(不走 COM 系统图像列表——

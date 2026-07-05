@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 using DesktopBox.Models;
 using DesktopBox.Services;
 using DesktopBox.ViewModels;
@@ -20,6 +22,12 @@ public class MainViewModelTests
     private MainViewModel NewVm()
     {
         _store.Reset();
+        _icon.Reset();
+        _organize.Reset();
+        _desktopIcons.Reset();
+        _localizer.Reset();
+        _shellChange.Reset();
+        _categorizer.Reset();
         // Localizer 索引器回退:返回 key 本身(模拟"无翻译"行为)
         _localizer.Setup(l => l[It.IsAny<string>()]).Returns<string>(k => k);
         _store.Setup(s => s.Load()).Returns(new AppConfig());
@@ -91,6 +99,83 @@ public class MainViewModelTests
         _store.Invocations.Clear();
         vm.Save();
         _store.Verify(s => s.Save(It.Is<AppConfig>(c => c.Boxes.Count == 1)), Times.Once);
+    }
+
+    [Fact]
+    public void SystemIconChanged_DeduplicatesSystemIconPathsBeforeExtraction()
+    {
+        var vm = NewVm();
+        const string recycleBin = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+        const string thisPc = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
+        vm.Boxes.Add(new BoxViewModel(new Box
+        {
+            Name = "sys",
+            Items =
+            {
+                new BoxItem { Type = ItemType.SystemIcon, TargetPath = recycleBin, DisplayName = "Recycle Bin" },
+                new BoxItem { Type = ItemType.SystemIcon, TargetPath = recycleBin, DisplayName = "Recycle Bin duplicate" },
+                new BoxItem { Type = ItemType.SystemIcon, TargetPath = thisPc, DisplayName = "This PC" }
+            }
+        }));
+
+        var calls = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        using var done = new ManualResetEventSlim();
+        _icon.Setup(i => i.Extract(It.IsAny<string>(), true))
+            .Returns<string, bool>((path, _) =>
+            {
+                calls.AddOrUpdate(path, 1, (_, count) => count + 1);
+                if (calls.Count == 2) done.Set();
+                return path + ".png";
+            });
+
+        _shellChange.Raise(s => s.SystemIconChanged += null, EventArgs.Empty);
+
+        done.Wait(TimeSpan.FromSeconds(2)).Should().BeTrue();
+        calls[recycleBin].Should().Be(1);
+        calls[thisPc].Should().Be(1);
+    }
+
+    [Fact]
+    public void SystemIconChanged_CoalescesRequestsWhileRefreshIsRunning()
+    {
+        var vm = NewVm();
+        const string recycleBin = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+        vm.Boxes.Add(new BoxViewModel(new Box
+        {
+            Name = "sys",
+            Items =
+            {
+                new BoxItem { Type = ItemType.SystemIcon, TargetPath = recycleBin, DisplayName = "Recycle Bin" }
+            }
+        }));
+
+        using var firstStarted = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        var calls = 0;
+        _icon.Setup(i => i.Extract(It.IsAny<string>(), true))
+            .Returns<string, bool>((_, _) =>
+            {
+                var current = Interlocked.Increment(ref calls);
+                if (current == 1)
+                {
+                    firstStarted.Set();
+                    releaseFirst.Wait(TimeSpan.FromSeconds(2));
+                }
+                return $"icon-{current}.png";
+            });
+
+        _shellChange.Raise(s => s.SystemIconChanged += null, EventArgs.Empty);
+        firstStarted.Wait(TimeSpan.FromSeconds(2)).Should().BeTrue();
+
+        for (var i = 0; i < 5; i++)
+            _shellChange.Raise(s => s.SystemIconChanged += null, EventArgs.Empty);
+
+        Volatile.Read(ref calls).Should().Be(1);
+        releaseFirst.Set();
+
+        SpinWait.SpinUntil(() => Volatile.Read(ref calls) >= 2, TimeSpan.FromSeconds(2)).Should().BeTrue();
+        Thread.Sleep(200);
+        Volatile.Read(ref calls).Should().Be(2);
     }
 
     // ToggleDesktopIcons 依赖 GUI 对话框(InputDialog.Inform),命令末尾会弹窗,
