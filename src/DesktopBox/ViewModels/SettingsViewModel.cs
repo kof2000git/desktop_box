@@ -10,6 +10,12 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IThemeService _theme;
     private readonly IPersistenceService _store;
     private readonly ILocalizerService _localizer;
+    private bool _persistedFollowSystemTheme;
+    private bool _persistedIsDark;
+    private string _persistedLanguage = "auto";
+    private bool _isRollingBack;
+
+    public event EventHandler<Exception>? PersistenceFailed;
 
     [ObservableProperty] private bool _autoStart;
     [ObservableProperty] private bool _followSystemTheme;
@@ -36,6 +42,9 @@ public partial class SettingsViewModel : ObservableObject
         _isDark = _followSystemTheme ? _theme.IsSystemDark()
             : cfg.Settings.Theme.Equals("Dark", StringComparison.OrdinalIgnoreCase);
         _language = string.IsNullOrEmpty(cfg.Settings.Language) ? "auto" : cfg.Settings.Language;
+        _persistedFollowSystemTheme = _followSystemTheme;
+        _persistedIsDark = _isDark;
+        _persistedLanguage = _language;
     }
 
     partial void OnAutoStartChanged(bool value)
@@ -44,30 +53,76 @@ public partial class SettingsViewModel : ObservableObject
         else _startup.Disable();
     }
 
-    partial void OnFollowSystemThemeChanged(bool value) => ApplyChanges();
+    partial void OnFollowSystemThemeChanged(bool value)
+    {
+        if (!_isRollingBack) ApplyChanges();
+    }
 
     partial void OnIsDarkChanged(bool value)
     {
-        if (!FollowSystemTheme) ApplyChanges();
+        if (!_isRollingBack && !FollowSystemTheme) ApplyChanges();
     }
 
     partial void OnLanguageChanged(string value)
     {
-        // 持久化 + 即时切换:DynamicResource 自动刷新,托盘菜单/分类标签 Header 由事件刷新
-        var cfg = _store.Load();
-        cfg.Settings.Language = value;
-        _store.Save(cfg);
-        _localizer.Apply(value);
+        if (_isRollingBack) return;
+        try
+        {
+            // Persist before applying so a failed write cannot leave UI and disk disagreeing.
+            var cfg = _store.Load();
+            cfg.Settings.Language = value;
+            _store.Save(cfg);
+            _persistedLanguage = value;
+            _localizer.Apply(value);
+        }
+        catch (Exception ex)
+        {
+            _isRollingBack = true;
+            try { Language = _persistedLanguage; }
+            finally { _isRollingBack = false; }
+            OnPropertyChanged(nameof(LangIndex));
+            ReportPersistenceFailure(ex);
+        }
     }
 
     public void ApplyChanges()
     {
-        var cfg = _store.Load();
-        cfg.Settings.FollowSystemTheme = FollowSystemTheme;
-        if (!FollowSystemTheme) cfg.Settings.Theme = IsDark ? "Dark" : "Light";
-        _store.Save(cfg);
+        try
+        {
+            var cfg = _store.Load();
+            cfg.Settings.FollowSystemTheme = FollowSystemTheme;
+            if (!FollowSystemTheme) cfg.Settings.Theme = IsDark ? "Dark" : "Light";
+            _store.Save(cfg);
+            _persistedFollowSystemTheme = FollowSystemTheme;
+            _persistedIsDark = IsDark;
+        }
+        catch (Exception ex)
+        {
+            _isRollingBack = true;
+            try
+            {
+                FollowSystemTheme = _persistedFollowSystemTheme;
+                IsDark = _persistedIsDark;
+            }
+            finally { _isRollingBack = false; }
+            ReportPersistenceFailure(ex);
+            return;
+        }
 
-        if (FollowSystemTheme) _theme.ApplySystem();
-        else _theme.Apply(IsDark ? "Dark" : "Light");
+        if (FollowSystemTheme)
+        {
+            _theme.ApplySystem();
+        }
+        else
+        {
+            _theme.StopFollowingSystem();
+            _theme.Apply(IsDark ? "Dark" : "Light");
+        }
+    }
+
+    private void ReportPersistenceFailure(Exception exception)
+    {
+        App.LogError(exception, "SettingsViewModel.Save");
+        PersistenceFailed?.Invoke(this, exception);
     }
 }

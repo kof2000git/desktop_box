@@ -91,8 +91,12 @@
     <s:String x:Key="dialog.merge.title">合并盒子</s:String>
     <s:String x:Key="dialog.merge.prompt">选择要合并进来的盒子(将作为新标签加入当前盒子):</s:String>
     <s:String x:Key="dialog.openFail">无法打开:{0}</s:String>
-    <s:String x:Key="dialog.targetGone">「{0}」的目标已不存在(可能被删除或移动),已从盒子移除该条目。&#x0a;(仅取消盒内显示,文件本体不受影响。)</s:String>
+    <s:String x:Key="dialog.targetGone">「{0}」的目标当前不可用，可能已被移动、删除，或所在磁盘/网络暂时离线。&#x0a;&#x0a;该引用会保留在盒子中；确认不再需要时，可用右键菜单手动移除。</s:String>
+    <s:String x:Key="dialog.shellMenuFailed">系统右键菜单进程异常退出或响应超时。本次操作已停止，请重试；盒子中的引用不会被移除。</s:String>
     <s:String x:Key="dialog.unhandledError">发生了一个错误,但程序将继续运行:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.fatalError">程序遇到无法安全恢复的错误，即将退出。错误详情已写入日志：&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.startupConfigFailed">配置文件当前无法读取，DesktopBox 将退出以避免覆盖数据。请关闭占用配置文件的同步或安全软件后重试：&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="notification.saveFailed">配置保存失败，当前改动可能尚未写入磁盘：{0}</s:String>
     <s:String x:Key="dialog.sysIcons.exists">已经存在「系统图标」盒子了。</s:String>
     <s:String x:Key="dialog.split.confirm">将盒子「{0}」拆分为 {1} 个独立盒子?&#x0a;(每个标签变成一个单独盒子,位置略有错开,可拖开)</s:String>
 

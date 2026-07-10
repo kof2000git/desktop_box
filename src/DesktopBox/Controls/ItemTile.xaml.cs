@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -253,7 +252,7 @@ public partial class ItemTile : UserControl
         if (Item is null) return;
         if (IsLocalPathItem(Item) && !TargetExists(Item.TargetPath))
         {
-            NotifyGoneAndRemove();
+            NotifyTargetUnavailable();
             return;
         }
         try
@@ -270,11 +269,7 @@ public partial class ItemTile : UserControl
         }
     }
 
-    /// <summary>右键:原生 Shell 菜单由 C++ DLL(DesktopBox.ShellMenu.dll)提供,绕过 .NET COM interop 的 CSE 崩溃。
-    /// 返回 0x7000=用户选了"从盒子移除";其他=取消或已执行选中的 Shell 命令。</summary>
-    [DllImport("DesktopBox.ShellMenu.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern int ShowShellMenu(string path, int screenX, int screenY);
-
+    /// <summary>右键:原生 Shell 菜单由独立 helper 进程提供,把第三方 Shell 扩展与主进程隔离。</summary>
     private async void OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         var item = Item;
@@ -296,14 +291,31 @@ public partial class ItemTile : UserControl
         var pt = PointToScreen(new Point(0, ActualHeight));
         try
         {
-            int result = 0;
             bool fallback = item.Type == ItemType.Url;
             if (!fallback)
             {
                 try
                 {
-                    result = await Services.StaTaskRunner.Run(() =>
-                        ShowShellMenu(item.TargetPath, (int)pt.X, (int)pt.Y));
+                    var runner = App.Services.GetRequiredService<IShellMenuRunner>();
+                    var helperResult = await runner.ShowAsync(item.TargetPath, (int)pt.X, (int)pt.Y);
+                    switch (helperResult.Status)
+                    {
+                        case ShellMenuRunStatus.StartFailed:
+                            fallback = true;
+                            break;
+                        case ShellMenuRunStatus.RemoveFromBox:
+                            RemoveFromBox();
+                            return;
+                        case ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut or ShellMenuRunStatus.IsolationUnavailable:
+                            App.LogError(
+                                new InvalidOperationException(
+                                    $"Shell menu helper {helperResult.Status}; exitCode={helperResult.ExitCode?.ToString() ?? "unknown"}"),
+                                "ItemTile.ShellMenuHelper");
+                            InputDialog.Inform(Localizer["dialog.shellMenuFailed"]);
+                            return;
+                        case ShellMenuRunStatus.Completed:
+                            break;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -319,13 +331,12 @@ public partial class ItemTile : UserControl
                 menu.IsOpen = true;
                 return;
             }
-            if (result == 0x7000) { RemoveFromBox(); return; }
 
             // 原生菜单可能执行了"删除/剪切/重命名"等命令,使目标路径失效。延一帧校验刷新。
             await Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (Item is not null && ReferenceEquals(Item, item) && IsLocalPathItem(item) && !TargetExists(item.TargetPath))
-                    NotifyGoneAndRemove();
+                    NotifyTargetUnavailable();
             }));
         }
         finally
@@ -341,11 +352,10 @@ public partial class ItemTile : UserControl
     private static bool TargetExists(string path) =>
         File.Exists(path) || Directory.Exists(path);
 
-    private void NotifyGoneAndRemove()
+    private void NotifyTargetUnavailable()
     {
         if (Item is null) return;
         InputDialog.Inform(string.Format(Localizer["dialog.targetGone"], Item.DisplayName));
-        RemoveFromBox();
     }
 
     private ContextMenu BuildContextMenu()

@@ -11,6 +11,7 @@
 #define DBX_CMD_FIRST 1
 #define DBX_CMD_LAST  0x6FFF
 #define DBX_ID_REMOVE 0x7000
+#define DBX_RESULT_FAILED 0x7001
 
 // Unicode build still sees CFSTR_PREFERREDDROPEFFECT as a narrow SDK macro here.
 static const wchar_t* kPreferredDropEffectFormat = L"Preferred DropEffect";
@@ -41,7 +42,7 @@ static bool ShowShellProperties(const wchar_t* path, HWND owner) {
 
 static std::wstring GetCommandVerb(IContextMenu* cm, UINT idCmd) {
     wchar_t verb[128] = {};
-    HRESULT hr = cm->GetCommandString(idCmd, GCS_VERBW, nullptr, reinterpret_cast<LPSTR>(verb), sizeof(verb));
+    HRESULT hr = cm->GetCommandString(idCmd, GCS_VERBW, nullptr, reinterpret_cast<LPSTR>(verb), _countof(verb));
     if (FAILED(hr) || !verb[0])
         return L"";
     return verb;
@@ -90,10 +91,12 @@ static bool SetFileClipboard(const wchar_t* path, DWORD dropEffect) {
     bool ok = false;
     EmptyClipboard();
     const UINT preferredDropEffect = RegisterClipboardFormatW(kPreferredDropEffectFormat);
-    if (SetClipboardData(CF_HDROP, hDrop) && SetClipboardData(preferredDropEffect, hEffect)) {
+    if (SetClipboardData(CF_HDROP, hDrop)) {
         hDrop = nullptr;
-        hEffect = nullptr;
-        ok = true;
+        if (SetClipboardData(preferredDropEffect, hEffect)) {
+            hEffect = nullptr;
+            ok = true;
+        }
     }
     CloseClipboard();
 
@@ -143,10 +146,9 @@ static HWND CreateHookWindow() {
                            nullptr, nullptr, wc.hInstance, nullptr);
 }
 
-extern "C" __declspec(dllexport)
-int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
-    if (!path || !*path) { DbgLog("null/empty path"); return 0; }
-    // 记录 C++ 实际收到的 path(确认 P/Invoke marshaling 无误)
+static int ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
+    if (!path || !*path) { DbgLog("null/empty path"); return DBX_RESULT_FAILED; }
+    // Record the helper argument for optional native diagnostics.
     char pathBuf[160] = {};
     WideCharToMultiByte(CP_UTF8, 0, path, -1, pathBuf, sizeof(pathBuf), nullptr, nullptr);
     { char buf[256]; sprintf_s(buf, "=== start === path=[%s] len=%zu x=%d y=%d", pathBuf, wcslen(path), screenX, screenY); DbgLog(buf); }
@@ -154,9 +156,9 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     { char buf[80]; sprintf_s(buf, "CoInitializeEx hr=0x%lX", (unsigned long)hrCo); DbgLog(buf); }
     const bool coInitialized = SUCCEEDED(hrCo);
-    if (FAILED(hrCo)) return 0;
+    if (FAILED(hrCo)) return DBX_RESULT_FAILED;
 
-    int result = 0;
+    int result = DBX_RESULT_FAILED;
     PIDLIST_ABSOLUTE pidl = nullptr;
     IShellFolder* parent = nullptr;
     IContextMenu* cm = nullptr;
@@ -201,14 +203,17 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
                                 screenX, screenY, hwndMenu, nullptr);
     { char buf[64]; sprintf_s(buf, "TrackPopupMenuEx cmd=%u", (unsigned)cmd); DbgLog(buf); }
 
-    if (cmd == DBX_ID_REMOVE) {
+    if (cmd == 0) {
+        result = 0;
+    } else if (cmd == DBX_ID_REMOVE) {
         result = DBX_ID_REMOVE;
     } else if (cmd >= DBX_CMD_FIRST && cmd <= DBX_CMD_LAST) {
         const UINT idCmd = cmd - DBX_CMD_FIRST;
         const std::wstring verb = GetCommandVerb(cm, idCmd);
         if (IsPropertiesCommand(verb)) {
-            DbgLog(ShowShellProperties(path, hwndMenu) ? "ShowShellProperties-OK" : "ShowShellProperties-FAIL");
-            result = 0;
+            const bool shown = ShowShellProperties(path, hwndMenu);
+            DbgLog(shown ? "ShowShellProperties-OK" : "ShowShellProperties-FAIL");
+            if (shown) result = 0;
             goto cleanup;
         }
 
@@ -221,12 +226,14 @@ int WINAPI ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
         info.nShow = SW_SHOWNORMAL;
         hr = cm->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&info));
         DbgLog("InvokeCommand", hr);
-        if (SUCCEEDED(hr) && EqualsVerb(verb.c_str(), L"cut")) {
-            DbgLog(SetFileClipboard(path, DROPEFFECT_MOVE) ? "SetFileClipboard-cut-OK" : "SetFileClipboard-cut-FAIL");
-        } else if (SUCCEEDED(hr) && EqualsVerb(verb.c_str(), L"copy")) {
-            DbgLog(SetFileClipboard(path, DROPEFFECT_COPY) ? "SetFileClipboard-copy-OK" : "SetFileClipboard-copy-FAIL");
+        if (SUCCEEDED(hr)) {
+            if (EqualsVerb(verb.c_str(), L"cut")) {
+                DbgLog(SetFileClipboard(path, DROPEFFECT_MOVE) ? "SetFileClipboard-cut-OK" : "SetFileClipboard-cut-FAIL");
+            } else if (EqualsVerb(verb.c_str(), L"copy")) {
+                DbgLog(SetFileClipboard(path, DROPEFFECT_COPY) ? "SetFileClipboard-copy-OK" : "SetFileClipboard-copy-FAIL");
+            }
+            result = 0;
         }
-        result = 0;
     }
 
 cleanup:
@@ -242,4 +249,26 @@ cleanup:
     return result;
 }
 
-BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID) { (void)reason; return TRUE; }
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv || argc != 4) {
+        if (argv) LocalFree(argv);
+        return 1;
+    }
+
+    wchar_t* endX = nullptr;
+    wchar_t* endY = nullptr;
+    const long screenX = wcstol(argv[2], &endX, 10);
+    const long screenY = wcstol(argv[3], &endY, 10);
+    if (!endX || *endX || !endY || *endY) {
+        LocalFree(argv);
+        return 1;
+    }
+
+    const int result = ShowShellMenu(argv[1], static_cast<int>(screenX), static_cast<int>(screenY));
+    LocalFree(argv);
+    return result;
+}

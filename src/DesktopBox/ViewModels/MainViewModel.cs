@@ -14,7 +14,7 @@ using DesktopBox.Views;
 
 namespace DesktopBox.ViewModels;
 
-public partial class MainViewModel : ObservableObject
+public partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IPersistenceService _store;
     private readonly IDropParserService _parser;
@@ -23,10 +23,14 @@ public partial class MainViewModel : ObservableObject
     private readonly ICategorizerService _categorizer;
     private readonly IDesktopIconsService _desktopIcons;
     private readonly ILocalizerService _localizer;
+    private readonly IShellChangeNotifierService _shellChange;
     private Timer? _debounce;
+    private bool _disposed;
     private readonly object _systemIconRefreshGate = new();
     private bool _systemIconRefreshRunning;
     private List<BoxItem>? _pendingSystemIconRefreshItems;
+
+    public event EventHandler<Exception>? PersistenceFailed;
 
     public ObservableCollection<BoxViewModel> Boxes { get; } = new();
 
@@ -79,31 +83,16 @@ public partial class MainViewModel : ObservableObject
         _categorizer = categorizer;
         _desktopIcons = desktopIcons;
         _localizer = localizer;
+        _shellChange = shellChange;
         // 语言切换后刷新所有程序生成盒子/标签的显示名(Header)
-        _localizer.LanguageChanged += (_, _) => RefreshAllHeaders();
+        _localizer.LanguageChanged += OnLanguageChanged;
         // 系统图标自动刷新:回收站清空/还原、此电脑盘符变化等 shell 通知 → 重新提取受影响图标
-        shellChange.SystemIconChanged += (_, _) => RefreshSystemIcons();
-        // 桌面文件变化:用户在资源管理器删/移桌面文件后,盒子中对应项需同步移除,否则点击失效项报错。
-        shellChange.DesktopFilesChanged += (_, _) => PruneStaleItems();
+        _shellChange.SystemIconChanged += OnSystemIconChanged;
     }
 
-    /// <summary>清理所有盒子(含标签)中"目标已不存在"的条目。用户在资源管理器删桌面文件后触发。
-    /// 只移除本地文件类条目(系统图标/URL 不检查,它们有自己的有效性逻辑)。</summary>
-    private void PruneStaleItems()
-    {
-        // 先收集要移除的项(不在遍历中修改集合)
-        var stale = new List<BoxItem>();
-        foreach (var it in AllItems())
-        {
-            if (it.Type == ItemType.SystemIcon || it.Type == ItemType.Url) continue;
-            if (it.TargetPath.StartsWith("::", StringComparison.Ordinal)) continue;
-            if (it.TargetPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!File.Exists(it.TargetPath) && !Directory.Exists(it.TargetPath))
-                stale.Add(it);
-        }
-        if (stale.Count == 0) return;
-        foreach (var it in stale) RemoveItemAnywhere(it);
-    }
+    private void OnLanguageChanged(object? sender, EventArgs e) => RefreshAllHeaders();
+
+    private void OnSystemIconChanged(object? sender, EventArgs e) => RefreshSystemIcons();
 
     [RelayCommand]
     private void Load()
@@ -624,6 +613,7 @@ public partial class MainViewModel : ObservableObject
     /// 重新提取所有系统图标(回收站空/满、此电脑盘符等状态会变)。forceRefresh=true 强制删旧缓存。</summary>
     private void RefreshSystemIcons()
     {
+        if (_disposed) return;
         var sysItems = CollectSystemIconItems();
         if (sysItems.Count == 0) return;
 
@@ -756,17 +746,19 @@ public partial class MainViewModel : ObservableObject
     // ---- 持久化 ----
     public void ScheduleSave()
     {
-        _debounce?.Dispose();
-        _debounce = new Timer(_ =>
+        if (_disposed) return;
+        var timer = new Timer(_ =>
         {
             try
             {
+                if (_disposed) return;
                 var disp = Application.Current?.Dispatcher;
-                if (disp is null || disp.HasShutdownStarted)
+                if (disp is null)
                 {
                     Save();
                     return;
                 }
+                if (disp.HasShutdownStarted) return;
                 disp.BeginInvoke(new Action(() =>
                 {
                     try { Save(); }
@@ -775,20 +767,29 @@ public partial class MainViewModel : ObservableObject
             }
             catch { /* 落盘失败不崩 */ }
         }, null, 300, Timeout.Infinite);
+        Interlocked.Exchange(ref _debounce, timer)?.Dispose();
+        if (_disposed && ReferenceEquals(
+                Interlocked.CompareExchange(ref _debounce, null, timer), timer))
+        {
+            timer.Dispose();
+        }
     }
 
-    public void Save()
+    public void Save() => TrySave();
+
+    public bool TrySave()
     {
+        if (_disposed) return false;
         var disp = Application.Current?.Dispatcher;
         if (disp is not null && !disp.CheckAccess())
         {
-            if (disp.HasShutdownStarted) return;
+            if (disp.HasShutdownStarted) return false;
             try
             {
-                disp.Invoke(new Action(Save));
+                return disp.Invoke(TrySave);
             }
-            catch { /* 落盘失败不应影响使用 */ }
-            return;
+            catch (Exception ex) { ReportPersistenceFailure(ex); }
+            return false;
         }
 
         try
@@ -805,8 +806,19 @@ public partial class MainViewModel : ObservableObject
                 cfg.Boxes.Add(m);
             }
             _store.Save(cfg);
+            return true;
         }
-        catch { /* 落盘失败不应影响使用,也不弹吓人错误框 */ }
+        catch (Exception ex)
+        {
+            ReportPersistenceFailure(ex);
+            return false;
+        }
+    }
+
+    private void ReportPersistenceFailure(Exception exception)
+    {
+        App.LogError(exception, "MainViewModel.Save");
+        PersistenceFailed?.Invoke(this, exception);
     }
 
     /// <summary>语言切换后:刷新所有盒子与标签的 Header(显示名),让程序生成的项按新语言显示。</summary>
@@ -817,5 +829,15 @@ public partial class MainViewModel : ObservableObject
             b.RefreshHeader();
             foreach (var t in b.Tabs) t.RefreshHeader();
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Interlocked.Exchange(ref _debounce, null)?.Dispose();
+        _localizer.LanguageChanged -= OnLanguageChanged;
+        _shellChange.SystemIconChanged -= OnSystemIconChanged;
+        GC.SuppressFinalize(this);
     }
 }

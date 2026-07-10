@@ -47,7 +47,7 @@
 | 🗂️ | **Tabbed boxes** — Convert/merge/split boxes into tabbed containers; reorder tabs by drag. |
 | 👁️ | **Hide/Show desktop icons** — One toggle clears your real desktop icons (purely visual, no files touched). |
 | 🖥️ | **System-icons box** — This PC / Recycle Bin / Control Panel / Network with **real system icons**. |
-| 🖱️ | **Native shell context menu** — Real Windows right-click menu (Open / Properties / Send To / …) via a bundled C++ DLL. |
+| 🖱️ | **Native shell context menu** — Real Windows right-click menu (Open / Properties / Send To / …) via a bundled C++ helper executable. |
 | ♻️ | **Green & portable** — A single ~74 MB exe. Config & icon cache live **next to the exe**; delete everything except the exe and it still runs and regenerates them. |
 | 🔒 | **No telemetry, no network** — Never connects anywhere. |
 
@@ -61,7 +61,7 @@
 | 🗂️ | **标签盒子** — 盒子可转标签盒子、合并/拆分,标签可拖动排序。 |
 | 👁️ | **隐藏/显示桌面图标** — 一键清空桌面真实图标(纯视觉,不动文件)。 |
 | 🖥️ | **系统图标盒子** — 此电脑/回收站/控制面板/网络,用**真实系统图标**。 |
-| 🖱️ | **原生右键菜单** — 真正的 Windows 右键菜单(打开/属性/发送到/…),由配套 C++ DLL 提供。 |
+| 🖱️ | **原生右键菜单** — 真正的 Windows 右键菜单(打开/属性/发送到/…),由配套 C++ helper EXE 提供。 |
 | ♻️ | **绿色便携** — 单个 ~74MB 的 exe。默认把配置与图标缓存放在**exe 同目录**;若目录不可写,会自动退到 `%LocalAppData%\\DesktopBox`。 |
 | 🔒 | **零联网、零遥测** — 永不联网。 |
 
@@ -89,7 +89,7 @@ Go to **[Releases](../../releases)** and grab one of:
 | File · 文件 | 说明 |
 |---|---|
 | `DesktopBox.exe` | **绿色版**(推荐)· 双击即用,免安装,不写注册表 · 74 MB |
-| `DesktopBox.ShellMenu.dll` | 原生右键菜单 DLL · 与 exe 放同目录(可选,缺则无原生菜单) |
+| `DesktopBox.ShellMenu.exe` | 原生右键菜单 helper · 与主程序放同目录(可选,缺少时无原生菜单) |
 | `DesktopBoxSetup.exe` | 安装包 · 一路 Next 即可(向导英文,软件本体中文) |
 
 > ⚠️ **SmartScreen 提示?** → 点「更多信息 → 仍要运行」。本程序无数字签名,首次会有此提示,纯属正常。
@@ -142,7 +142,7 @@ For bugs, please open an [issue](../../issues) with reproduction steps and `logs
 | Tool · 工具 | Version · 版本 | Purpose · 用途 |
 |---|---|---|
 | [.NET 8 SDK](https://dotnet.microsoft.com/download) | 8.0+ | 主程序 (C# / WPF) |
-| [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) 或 Visual Studio | 17.x (含 C++ + Windows SDK) | 编译原生右键菜单 DLL (C++) |
+| [MSVC Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) 或 Visual Studio | 17.x (含 C++ + Windows SDK) | 编译原生右键菜单 helper EXE (C++) |
 | [Inno Setup](https://jrsoftware.org/isdl.php) _(可选)_ | 6.x | 打安装包 |
 
 Verify · 验证:
@@ -188,21 +188,21 @@ This produces a **single ~74 MB `publish/DesktopBox.exe`** with the entire .NET 
 
 产出**单个 ~74MB 的 `publish/DesktopBox.exe`**,内含完整 .NET 运行时 + WPF。
 
-### 4️⃣ Build the native shell-menu DLL · 编译原生右键菜单 DLL
+### 4️⃣ Build the native shell-menu helper · 编译原生右键菜单 helper
 
-The right-click shell menu is a small C++ DLL (`DesktopBox.ShellMenu.dll`). Build it from a **`x64 Native Tools Command Prompt for VS`** (so `cl.exe` is on PATH):
+The right-click shell menu is hosted by a small isolated C++ helper executable (`DesktopBox.ShellMenu.exe`). The build script locates MSVC automatically:
 
-右键菜单是一个小型 C++ DLL,需在 **「x64 本机工具命令提示符」** 中编译(保证 `cl.exe` 在 PATH):
+右键菜单由小型、隔离运行的 C++ helper EXE (`DesktopBox.ShellMenu.exe`) 承载；构建脚本会自动定位 MSVC:
 
 ```bat
 cd src\DesktopBox.ShellMenu
 build_dll.bat
 ```
 
-This drops `DesktopBox.ShellMenu.dll` into the `publish\` folder. Place it **next to** `DesktopBox.exe`.
+This drops `DesktopBox.ShellMenu.exe` into the `publish\` folder. Place it **next to** `DesktopBox.exe`.
 
-> 💡 **Without this DLL** the app still runs fine — right-click just falls back to no native menu (it's wrapped in try/catch). For full functionality, ship both files.
-> 💡 **没有这个 DLL 程序照常运行**,只是右键没有原生菜单(代码有 try/catch 兜底)。要完整功能,两个文件一起分发。
+> 💡 **Without this helper EXE** the app still runs fine; right-click simply has no native menu. For full functionality, ship both executables.
+> 💡 **没有这个 helper EXE 程序照常运行**,只是右键没有原生菜单。要完整功能,两个 EXE 一起分发。
 
 ### 5️⃣ (Optional) Build installer · 打安装包
 
@@ -225,7 +225,7 @@ src/
 │   ├── ViewModels/          # MVVM (CommunityToolkit.Mvvm)
 │   ├── Views/ & Controls/   # MainWindow, BoxControl, ItemTile …
 │   └── Native/              # P/Invoke: Shell32, User32, IImageList …
-├── DesktopBox.ShellMenu/    # Native C++ DLL — IContextMenu host
+├── DesktopBox.ShellMenu/    # Native C++ helper EXE — isolated IContextMenu host
 │   ├── DesktopBox.ShellMenu.cpp
 │   └── build_dll.bat
 └── DesktopBox.Tests/        # xUnit regression tests
@@ -235,6 +235,7 @@ src/
 
 - **Desktop-layer boxes** — Each box is hosted as a transparent child HWND on the desktop shell view, so desktop menus and normal app windows stay above it while the box remains visible through Win+D and desktop-icon toggles.
 - **Reference-only organize** — Tidying never calls `File.Move`; boxes store paths. Zero risk of "lost files".
+- **Stable references** — If a source file is moved or deleted later, its invalid box reference remains until the user removes it; **失效引用会保留**。
 - **Portable data** — Config (`boxes.json`, `organize.json`) and icon cache prefer the exe directory; if it is read-only (for example under Program Files), DesktopBox falls back to `%LocalAppData%\DesktopBox`.
 - **Service-layer interfaces + unit tests** — Core logic (categorize, organize, persistence) is fully testable; Native/UI layers are manually verified.
 
@@ -274,13 +275,13 @@ Contributions are welcome! · 欢迎贡献!
 
 - 🐛 **Bugs** — Open an [issue](../../issues) with steps to reproduce + `logs/error.log`.
 - 🧰 **Support** — Chinese users can join QQ group **657713542**.
-- 💡 **Ideas** — Multi-monitor, URL icons, box search, collapsible boxes …
+- 💡 **Ideas** — URL icons, box search, collapsible boxes …
 - 🌍 **i18n** — Help translate the UI.
 - ⭐ **Star it** if it helps you!
 
 - 🐛 **Bug** — 提 [issue](../../issues),附复现步骤 + `logs/error.log`。
 - 🧰 **反馈交流群** — 有问题可加入 QQ 群 **657713542**。
-- 💡 **建议** — 多屏支持、网址图标、盒子搜索、折叠盒子 …
+- 💡 **建议** — 网址图标、盒子搜索、折叠盒子 …
 - 🌍 **国际化** — 帮助翻译界面。
 - ⭐ 觉得有用就**点个 Star**!
 

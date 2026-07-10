@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using DesktopBox.Native;
 
 namespace DesktopBox.Services;
 
@@ -68,7 +69,7 @@ public class CategorizerService : ICategorizerService
             // 快捷方式独立成类:只有指向文件夹的快捷方式仍归「文件夹」,其余一律归「快捷方式」
             if (ext == ".lnk")
             {
-                var target = ResolveShortcut(path);
+                var target = ShellLinkResolver.ResolveTarget(path);
                 if (!string.IsNullOrEmpty(target) && Directory.Exists(target))
                     return FolderCat;
                 return Shortcut;
@@ -90,22 +91,5 @@ public class CategorizerService : ICategorizerService
         if (Vids.Contains(ext)) return Video;
         if (Auds.Contains(ext)) return Audio;
         return Other;
-    }
-
-    /// <summary>通过 WScript.Shell COM 解析 .lnk 真实目标。失败返回空。</summary>
-    private static string ResolveShortcut(string lnkPath)
-    {
-        try
-        {
-            var type = Type.GetTypeFromProgID("WScript.Shell");
-            if (type is null) return "";
-            dynamic shell = System.Activator.CreateInstance(type)!;
-            dynamic sc = shell.CreateShortcut(lnkPath);
-            return (string)sc.TargetPath;
-        }
-        catch
-        {
-            return "";
-        }
     }
 }

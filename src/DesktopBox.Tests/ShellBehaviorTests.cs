@@ -11,13 +11,13 @@ namespace DesktopBox.Tests;
 public class ShellBehaviorTests
 {
     [Fact]
-    public void DesktopBoxProject_PublishesNativeShellMenuDllWhenPresent()
+    public void DesktopBoxProject_PublishesNativeShellMenuHelperWhenPresent()
     {
         var projectPath = FindRepositoryFile("src", "DesktopBox", "DesktopBox.csproj");
         var project = System.Xml.Linq.XDocument.Load(projectPath);
         var shellMenuItem = project
             .Descendants("Content")
-            .SingleOrDefault(e => ((string?)e.Attribute("Include"))?.EndsWith("DesktopBox.ShellMenu.dll", StringComparison.OrdinalIgnoreCase) == true);
+            .SingleOrDefault(e => ((string?)e.Attribute("Include"))?.EndsWith("DesktopBox.ShellMenu.exe", StringComparison.OrdinalIgnoreCase) == true);
 
         shellMenuItem.Should().NotBeNull();
         shellMenuItem!.Attribute("Condition")?.Value.Should().Contain("Exists");
@@ -270,6 +270,20 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void DesktopChildWindows_ConvertVirtualScreenCoordinatesToParentClientCoordinates()
+    {
+        var user32 = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "Native", "User32.cs"));
+        var boxWindow = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "Views", "BoxWindow.cs"));
+        var overlay = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "Controls", "DesktopDropOverlay.cs"));
+
+        user32.Should().Contain("ScreenToClient");
+        user32.Should().Contain("ScreenPointToClient");
+        boxWindow.Should().Contain("ScreenPointToClient(parent, box.X, box.Y)");
+        boxWindow.Should().Contain("ScreenPointToClient(parent, Box.X, Box.Y)");
+        overlay.Should().Contain("ScreenPointToClient(parent, bounds.Left, bounds.Top)");
+    }
+
+    [Fact]
     public void BoxControl_RejectsDesktopBoxInternalDragOutDrops()
     {
         var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
@@ -286,8 +300,7 @@ public class ShellBehaviorTests
     {
         var codePath = FindRepositoryFile("src", "DesktopBox", "Controls", "BoxControl.xaml.cs");
         var code = File.ReadAllText(codePath);
-        var resizeBody = code[code.IndexOf("private void OnResize(", StringComparison.Ordinal)
-            ..code.IndexOf("private void OnResizeCompleted", StringComparison.Ordinal)];
+        var resizeBody = code[code.IndexOf("private void OnResize(", StringComparison.Ordinal)..code.IndexOf("private void OnResizeCompleted", StringComparison.Ordinal)];
 
         resizeBody.Should().NotContain("ScheduleSave");
         code.Should().Contain("private void OnResizeCompleted");
@@ -391,6 +404,151 @@ public class ShellBehaviorTests
         source.Should().Contain("Preferred DropEffect");
         source.Should().Contain("DROPEFFECT_MOVE");
         source.Should().Contain("DROPEFFECT_COPY");
+        source.Should().Contain("if (SetClipboardData(CF_HDROP, hDrop))");
+        source.Should().Contain("hDrop = nullptr;");
+        source.Should().Contain("if (SetClipboardData(preferredDropEffect, hEffect))");
+        source.Should().Contain("hEffect = nullptr;");
+        source.Should().NotContain("SetClipboardData(CF_HDROP, hDrop) && SetClipboardData");
+    }
+
+    [Fact]
+    public void NativeShellMenu_UsesCharacterCapacityForUnicodeCommandVerb()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("_countof(verb)");
+        source.Should().NotContain("reinterpret_cast<LPSTR>(verb), sizeof(verb)");
+    }
+
+    [Fact]
+    public void NativeShellMenu_BuildsAnExecutableProcessBoundary()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var buildPath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "build_dll.bat");
+        var source = File.ReadAllText(sourcePath);
+        var build = File.ReadAllText(buildPath);
+
+        source.Should().Contain("int WINAPI wWinMain");
+        source.Should().Contain("CommandLineToArgvW");
+        source.Should().NotContain("__declspec(dllexport)");
+        source.Should().NotContain("DllMain");
+        build.Should().Contain("DesktopBox.ShellMenu.exe");
+        build.Should().NotContain("/LD");
+    }
+
+    [Fact]
+    public async Task ShellMenuProcessRunner_ReturnsRemoveCodeFromSuccessfulHelper()
+    {
+        var runner = new ShellMenuProcessRunner(
+            Environment.GetEnvironmentVariable("ComSpec")!,
+            TimeSpan.FromSeconds(2),
+            ["/d", "/c", "exit /b 28672"]);
+
+        var result = await runner.ShowAsync("ignored", 0x7000, 0);
+
+        result.Status.Should().Be(ShellMenuRunStatus.RemoveFromBox);
+    }
+
+    [Fact]
+    public async Task ShellMenuProcessRunner_ReturnsNullWhenHelperIsMissing()
+    {
+        var runner = new ShellMenuProcessRunner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.exe"));
+
+        var result = await runner.ShowAsync("ignored", 1, 2);
+
+        result.Status.Should().Be(ShellMenuRunStatus.StartFailed);
+    }
+
+    [Fact]
+    public async Task ShellMenuProcessRunner_ReturnsNullWhenHelperCrashes()
+    {
+        var runner = new ShellMenuProcessRunner(
+            Environment.GetEnvironmentVariable("ComSpec")!,
+            TimeSpan.FromSeconds(2),
+            ["/d", "/c", "exit /b 9"]);
+
+        var result = await runner.ShowAsync("ignored", 1, 2);
+
+        result.Status.Should().Be(ShellMenuRunStatus.Crashed);
+    }
+
+    [Fact]
+    public async Task ShellMenuProcessRunner_ReturnsNullOnTimeout()
+    {
+        var runner = new ShellMenuProcessRunner(
+            Environment.GetEnvironmentVariable("ComSpec")!,
+            TimeSpan.FromMilliseconds(100),
+            ["/d", "/c", "ping 127.0.0.1 -n 6 >nul & rem"]);
+
+        var result = await runner.ShowAsync("ignored", 1, 2);
+
+        result.Status.Should().Be(ShellMenuRunStatus.TimedOut);
+    }
+
+    [Fact]
+    public async Task ShellMenuProcessRunner_DisposeTerminatesActiveHelper()
+    {
+        var runner = new ShellMenuProcessRunner(
+            Environment.GetEnvironmentVariable("ComSpec")!,
+            TimeSpan.FromSeconds(10),
+            ["/d", "/c", "ping 127.0.0.1 -n 6 >nul & rem"]);
+        var run = runner.ShowAsync("ignored", 1, 2);
+        await Task.Delay(100);
+
+        runner.Dispose();
+        var completed = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(3)));
+
+        completed.Should().BeSameAs(run);
+        (await run).Status.Should().Be(ShellMenuRunStatus.Crashed);
+    }
+
+    [Fact]
+    public void ShellMenuJob_AllowsInvokedApplicationsToBreakAwayAndChecksAssignment()
+    {
+        var job = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "Services", "ShellMenuJob.cs"));
+        var runner = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "Services", "ShellMenuProcessRunner.cs"));
+
+        job.Should().Contain("JobObjectLimitSilentBreakawayOk");
+        job.Should().Contain("JobObjectLimitKillOnJobClose | JobObjectLimitSilentBreakawayOk");
+        runner.Should().Contain("isolated = _job.TryAssign(process);");
+        runner.Should().Contain("if (!isolated)");
+        runner.Should().Contain("ShellMenuRunStatus.IsolationUnavailable");
+    }
+
+    [Fact]
+    public void NativeShellMenu_EnablesPerMonitorV2BeforeCreatingWindows()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2");
+        source.IndexOf("SetProcessDpiAwarenessContext", StringComparison.Ordinal)
+            .Should().BeLessThan(source.IndexOf("ShowShellMenu(argv[1]", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ItemTile_FallsBackOnlyWhenHelperCouldNotStart()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Controls", "ItemTile.xaml.cs");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("ShellMenuRunStatus.StartFailed");
+        source.Should().Contain("ShellMenuRunStatus.RemoveFromBox");
+        source.Should().Contain("ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut");
+        source.Should().Contain("ShellMenuRunStatus.IsolationUnavailable");
+        source.Should().Contain("App.LogError(");
+        source.Should().Contain("ItemTile.ShellMenuHelper");
+    }
+
+    [Fact]
+    public void StartupConfigurationReadFailure_ShutsDownExplicitly()
+    {
+        var source = File.ReadAllText(FindRepositoryFile("src", "DesktopBox", "App.xaml.cs"));
+
+        source.Should().Contain("catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)");
+        source.Should().Contain("dialog.startupConfigFailed");
+        source.Should().Contain("Shutdown();");
     }
 
     [Fact]
@@ -427,6 +585,18 @@ public class ShellBehaviorTests
 
         source.Should().Contain("static thread_local IContextMenu3* g_cm3");
         source.Should().Contain("static thread_local IContextMenu2* g_cm2");
+    }
+
+    [Fact]
+    public void NativeShellMenu_DistinguishesInternalFailureFromUserCancel()
+    {
+        var sourcePath = FindRepositoryFile("src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp");
+        var source = File.ReadAllText(sourcePath);
+
+        source.Should().Contain("DBX_RESULT_FAILED");
+        source.Should().Contain("int result = DBX_RESULT_FAILED;");
+        source.Should().Contain("if (cmd == 0)");
+        source.Should().Contain("result = 0;");
     }
 
     [Fact]

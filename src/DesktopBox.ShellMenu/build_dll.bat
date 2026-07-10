@@ -1,5 +1,5 @@
 @echo off
-REM Build DesktopBox.ShellMenu.dll (native C++ right-click menu host).
+REM Build DesktopBox.ShellMenu.exe (isolated native C++ right-click menu host).
 REM Portable: auto-locates MSVC via vswhere, uses repo-relative paths.
 REM Run from a normal cmd (NOT the VS developer prompt) — this script sets up the env.
 setlocal enabledelayedexpansion
@@ -31,12 +31,12 @@ if not exist "%REPO%\publish" mkdir "%REPO%\publish"
 set "INTDIR=%REPO%\publish\.native-build"
 if not exist "%INTDIR%" mkdir "%INTDIR%"
 
-cl /nologo /LD /O2 /EHsc /std:c++17 /utf-8 ^
+cl /nologo /O2 /EHsc /std:c++17 /utf-8 ^
   "%SCRIPTDIR%DesktopBox.ShellMenu.cpp" ^
   /Fo:"%INTDIR%\DesktopBox.ShellMenu.obj" ^
-  /Fe:"%REPO%\publish\DesktopBox.ShellMenu.dll" ^
+  /Fe:"%REPO%\publish\DesktopBox.ShellMenu.exe" ^
   /link ole32.lib shell32.lib user32.lib gdi32.lib ^
-  /IMPLIB:"%INTDIR%\DesktopBox.ShellMenu.lib"
+  /SUBSYSTEM:WINDOWS
 
 set "CL_EXIT=%ERRORLEVEL%"
 echo CL_EXIT=%CL_EXIT%

@@ -7,6 +7,13 @@ public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
 public static class User32
 {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int X;
+        public int Y;
+    }
+
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_LAYERED = 0x00080000;
@@ -28,6 +35,21 @@ public static class User32
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ScreenToClient(IntPtr hWnd, ref Point point);
+
+    public static (int X, int Y) ScreenPointToClient(IntPtr parent, double screenX, double screenY)
+    {
+        var point = new Point
+        {
+            X = (int)Math.Round(screenX),
+            Y = (int)Math.Round(screenY)
+        };
+        if (parent != IntPtr.Zero)
+            ScreenToClient(parent, ref point);
+        return (point.X, point.Y);
+    }
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);

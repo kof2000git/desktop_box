@@ -1,10 +1,12 @@
 ; DesktopBox Inno Setup 安装脚本
 ; 用法:用 ISCC.exe 编译本文件,生成 release\DesktopBoxSetup.exe
 
+#define MyAppVersion GetFileVersion("publish\DesktopBox.exe")
+
 [Setup]
 AppName=DesktopBox
-AppVersion=1.7.0
-AppVerName=DesktopBox 1.7.0
+AppVersion={#MyAppVersion}
+AppVerName=DesktopBox {#MyAppVersion}
 AppPublisher=DesktopBox
 DefaultDirName={localappdata}\Programs\DesktopBox
 DefaultGroupName=DesktopBox
@@ -31,7 +33,10 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "A
 
 [Files]
 Source: "publish\DesktopBox.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish\DesktopBox.ShellMenu.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish\DesktopBox.ShellMenu.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[InstallDelete]
+Type: files; Name: "{app}\DesktopBox.ShellMenu.dll"
 
 [Icons]
 Name: "{group}\DesktopBox"; Filename: "{app}\DesktopBox.exe"

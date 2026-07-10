@@ -81,8 +81,12 @@
     <s:String x:Key="dialog.merge.title">Merge Box</s:String>
     <s:String x:Key="dialog.merge.prompt">Select a box to merge in (added as a new tab):</s:String>
     <s:String x:Key="dialog.openFail">Cannot open: {0}</s:String>
-    <s:String x:Key="dialog.targetGone">The target of "{0}" no longer exists (deleted or moved) and has been removed from the box.&#x0a;(Only the box reference is removed; the file itself is untouched.)</s:String>
+    <s:String x:Key="dialog.targetGone">The target of "{0}" is currently unavailable. It may have moved, been deleted, or be on an offline drive or network location.&#x0a;&#x0a;The reference will remain in the box; remove it manually from the context menu when no longer needed.</s:String>
+    <s:String x:Key="dialog.shellMenuFailed">The system context-menu process crashed or timed out. This operation was stopped; try again. The box reference was not removed.</s:String>
     <s:String x:Key="dialog.unhandledError">An error occurred, but the program will keep running:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.fatalError">The application encountered an error it cannot safely recover from and will exit. Details were written to the log:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="dialog.startupConfigFailed">The configuration file cannot be read right now. DesktopBox will exit to avoid overwriting data. Close any sync or security software holding the file, then try again:&#x0a;&#x0a;{0}</s:String>
+    <s:String x:Key="notification.saveFailed">Configuration save failed. Recent changes may not be on disk: {0}</s:String>
     <s:String x:Key="dialog.sysIcons.exists">A "System Icons" box already exists.</s:String>
     <s:String x:Key="dialog.split.confirm">Split box "{0}" into {1} separate boxes?&#x0a;(Each tab becomes its own box, slightly offset so you can drag them apart.)</s:String>
 

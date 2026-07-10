@@ -1,5 +1,7 @@
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -23,6 +25,7 @@ public partial class App : Application
     public static string Version { get; } = (typeof(App).Assembly.GetName().Version?.ToString(3)) ?? "1.0";
 
     public static void BeginShutdown() => IsShuttingDown = true;
+    public static void CancelShutdown() => IsShuttingDown = false;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -34,14 +37,16 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             LogError(args.Exception, "DispatcherUnhandledException");
+            var canContinue = CanContinueAfterDispatcherException(args.Exception);
+            args.Handled = canContinue;
             try
             {
                 var loc = App.Services.GetRequiredService<ILocalizerService>();
-                MessageBox.Show(string.Format(loc["dialog.unhandledError"], args.Exception.Message),
-                    loc["app.errorTitle"], MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(string.Format(loc[GetDispatcherExceptionMessageKey(args.Exception)], args.Exception.Message),
+                    loc["app.errorTitle"], MessageBoxButton.OK,
+                    canContinue ? MessageBoxImage.Warning : MessageBoxImage.Error);
             }
             catch { }
-            args.Handled = true;
         };
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
@@ -61,17 +66,32 @@ public partial class App : Application
         MigrateLegacyConfig(); // 便携化:把旧版 %AppData%\DesktopBox 配置一次性搬到 exe 同目录
         base.OnStartup(e);
 
-        // 主题
-        var cfg = Services.GetRequiredService<IPersistenceService>().Load();
-        var theme = Services.GetRequiredService<IThemeService>();
-        if (cfg.Settings.FollowSystemTheme) theme.ApplySystem();
-        else theme.Apply(cfg.Settings.Theme);
+        try
+        {
+            // 主题
+            var cfg = Services.GetRequiredService<IPersistenceService>().Load();
+            var theme = Services.GetRequiredService<IThemeService>();
+            if (cfg.Settings.FollowSystemTheme) theme.ApplySystem();
+            else theme.Apply(cfg.Settings.Theme);
 
-        // 界面语言:检测系统语言或用手动设置(默认 auto=跟随系统)
-        Services.GetRequiredService<ILocalizerService>().Apply(cfg.Settings.Language);
+            // 界面语言:检测系统语言或用手动设置(默认 auto=跟随系统)
+            Services.GetRequiredService<ILocalizerService>().Apply(cfg.Settings.Language);
 
-        var main = Services.GetRequiredService<MainWindow>();
-        main.Show();
+            var main = Services.GetRequiredService<MainWindow>();
+            main.Show();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogError(ex, "App.StartupConfiguration");
+            try
+            {
+                var loc = Services.GetRequiredService<ILocalizerService>();
+                MessageBox.Show(string.Format(loc["dialog.startupConfigFailed"], ex.Message),
+                    loc["app.errorTitle"], MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch { }
+            Shutdown();
+        }
     }
 
     /// <summary>一次性把旧版 %AppData%\DesktopBox 下的配置搬到可执行文件同目录(仅在目标缺失时复制)。</summary>
@@ -152,6 +172,7 @@ public partial class App : Application
         s.AddSingleton<ILocalizerService, LocalizerService>();
         s.AddSingleton<IDesktopIconsService, DesktopIconsService>();
         s.AddSingleton<IShellChangeNotifierService, ShellChangeNotifierService>();
+        s.AddSingleton<IShellMenuRunner, ShellMenuProcessRunner>();
         s.AddSingleton<FirstLetterKeyboardNavigator>();
         s.AddSingleton<MainViewModel>();
         s.AddSingleton<SettingsViewModel>();
@@ -159,6 +180,16 @@ public partial class App : Application
         s.AddSingleton<SettingsWindow>();
         return s.BuildServiceProvider();
     }
+
+    internal static bool CanContinueAfterDispatcherException(Exception exception) => exception is
+        IOException or
+        UnauthorizedAccessException or
+        COMException or
+        Win32Exception or
+        OperationCanceledException;
+
+    internal static string GetDispatcherExceptionMessageKey(Exception exception) =>
+        CanContinueAfterDispatcherException(exception) ? "dialog.unhandledError" : "dialog.fatalError";
 
     protected override void OnExit(ExitEventArgs e)
     {

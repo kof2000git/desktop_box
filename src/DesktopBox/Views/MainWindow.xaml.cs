@@ -18,16 +18,21 @@ public partial class MainWindow : Window
 {
     private readonly uint _taskbarCreatedMessage = Native.User32.RegisterWindowMessage("TaskbarCreated");
     private readonly MainViewModel _vm;
+    private readonly SettingsViewModel _settingsVm;
     private readonly SettingsWindow _settings;
     private readonly ILocalizerService _localizer;
     private readonly Dictionary<Guid, BoxWindow> _boxWindows = new();
     private IntPtr _desktopHost;
     private Forms.NotifyIcon? _tray;
+    private Icon? _trayIcon;
+    private bool _ownedResourcesDisposed;
+    private DateTime _lastPersistenceFailureNotificationUtc;
 
-    public MainWindow(MainViewModel vm, SettingsWindow settings)
+    public MainWindow(MainViewModel vm, SettingsViewModel settingsVm, SettingsWindow settings)
     {
         InitializeComponent();
         _vm = vm;
+        _settingsVm = settingsVm;
         _settings = settings;
         _localizer = App.Services.GetRequiredService<ILocalizerService>();
         DataContext = _vm;
@@ -37,10 +42,12 @@ public partial class MainWindow : Window
         _vm.ScreenWidth = SystemParametersHelper.LayoutWidth;
         _vm.Boxes.CollectionChanged += OnBoxesChanged;
         _vm.PropertyChanged += OnViewModelPropertyChanged;
+        _vm.PersistenceFailed += OnPersistenceFailed;
+        _settingsVm.PersistenceFailed += OnPersistenceFailed;
 
         SetupTray();
         // WinForms 托盘菜单不像 WPF DynamicResource 会自动刷新,语言切换后需手动重建菜单文本
-        _localizer.LanguageChanged += (_, _) => RebuildTrayMenu();
+        _localizer.LanguageChanged += OnLanguageChanged;
     }
 
     protected override void OnContentRendered(EventArgs e)
@@ -89,9 +96,10 @@ public partial class MainWindow : Window
 
     private void SetupTray()
     {
+        _trayIcon = MakeIcon();
         _tray = new Forms.NotifyIcon
         {
-            Icon = MakeIcon(),
+            Icon = _trayIcon,
             Visible = true
         };
         RebuildTrayMenu();
@@ -103,6 +111,7 @@ public partial class MainWindow : Window
     {
         if (_tray is null) return;
         _tray.Text = $"DesktopBox {_localizer["app.trayText"]} v{App.Version}";
+        var oldMenu = _tray.ContextMenuStrip;
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(_localizer["menu.showBoxes"], null, (_, _) => ShowBoxes());
         menu.Items.Add(_localizer["menu.newBox"], null, (_, _) => _vm.AddBoxCommand.Execute(null));
@@ -113,11 +122,30 @@ public partial class MainWindow : Window
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(_localizer["menu.quit"], null, (_, _) => OnQuit(null, null));
         _tray.ContextMenuStrip = menu;
+        oldMenu?.Dispose();
     }
 
     private void ShowBoxes()
     {
         RefreshDesktopLayer();
+    }
+
+    private void OnLanguageChanged(object? sender, EventArgs e) => RebuildTrayMenu();
+
+    private void OnPersistenceFailed(object? sender, Exception exception)
+    {
+        var message = string.Format(_localizer["notification.saveFailed"], exception.Message);
+        if (App.IsShuttingDown)
+        {
+            MessageBox.Show(message, _localizer["app.errorTitle"], MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_tray is null) return;
+        var now = DateTime.UtcNow;
+        if (now - _lastPersistenceFailureNotificationUtc < TimeSpan.FromSeconds(30)) return;
+        _lastPersistenceFailureNotificationUtc = now;
+        _tray.ShowBalloonTip(5000, _localizer["app.errorTitle"], message, Forms.ToolTipIcon.Warning);
     }
 
     private static System.Drawing.Icon MakeIcon()
@@ -317,13 +345,59 @@ public partial class MainWindow : Window
         _settings.Activate();
     }
 
+    private void DisposeOwnedResources()
+    {
+        if (_ownedResourcesDisposed)
+            return;
+
+        _ownedResourcesDisposed = true;
+        _vm.Boxes.CollectionChanged -= OnBoxesChanged;
+        _vm.PropertyChanged -= OnViewModelPropertyChanged;
+        _vm.PersistenceFailed -= OnPersistenceFailed;
+        _settingsVm.PersistenceFailed -= OnPersistenceFailed;
+        _localizer.LanguageChanged -= OnLanguageChanged;
+
+        foreach (var window in _boxWindows.Values.ToList())
+        {
+            try
+            {
+                window.CloseForRemoval();
+            }
+            catch (Exception ex)
+            {
+                App.LogError(ex, "MainWindow.DisposeBoxWindow");
+            }
+        }
+        _boxWindows.Clear();
+
+        if (_tray is not null)
+        {
+            var menu = _tray.ContextMenuStrip;
+            _tray.ContextMenuStrip = null;
+            menu?.Dispose();
+            _tray.Dispose();
+            _tray = null;
+        }
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+    }
+
     private void OnQuit(object? sender, RoutedEventArgs? e)
     {
         App.BeginShutdown();
-        try { _vm.Save(); } catch { }
-        _tray?.Dispose();
-        _tray = null;
+        if (!_vm.TrySave())
+        {
+            App.CancelShutdown();
+            return;
+        }
+        DisposeOwnedResources();
         Application.Current.Shutdown();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        DisposeOwnedResources();
+        base.OnClosed(e);
     }
 
     protected override void OnClosing(CancelEventArgs e)

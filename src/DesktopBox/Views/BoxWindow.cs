@@ -25,14 +25,15 @@ public sealed class BoxWindow : IDisposable
     {
         MainVm = mainVm;
         Box = box;
+        var clientPosition = Native.User32.ScreenPointToClient(parent, box.X, box.Y);
 
         var parameters = new HwndSourceParameters(box.Header)
         {
             ParentWindow = parent,
             WindowStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
             ExtendedWindowStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-            PositionX = (int)Math.Round(box.X),
-            PositionY = (int)Math.Round(box.Y),
+            PositionX = clientPosition.X,
+            PositionY = clientPosition.Y,
             Width = Math.Max(1, (int)Math.Round(box.Width)),
             Height = Math.Max(1, (int)Math.Round(box.Height)),
             UsesPerPixelOpacity = false
@@ -67,11 +68,12 @@ public sealed class BoxWindow : IDisposable
         if (Native.User32.GetParent(_handle) != parent)
             Native.User32.SetParent(_handle, parent);
 
+        var clientPosition = Native.User32.ScreenPointToClient(parent, Box.X, Box.Y);
         Native.User32.SetWindowPos(
             _handle,
             Native.User32.HWND_TOP,
-            (int)Math.Round(Box.X),
-            (int)Math.Round(Box.Y),
+            clientPosition.X,
+            clientPosition.Y,
             Math.Max(1, (int)Math.Round(Box.Width)),
             Math.Max(1, (int)Math.Round(Box.Height)),
             Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
@@ -98,11 +100,13 @@ public sealed class BoxWindow : IDisposable
         var scale = GetDpiScale();
         _content.Width = Math.Max(1, Box.Width / scale.X);
         _content.Height = Math.Max(1, Box.Height / scale.Y);
+        var parent = Native.User32.GetParent(_handle);
+        var clientPosition = Native.User32.ScreenPointToClient(parent, Box.X, Box.Y);
         Native.User32.SetWindowPos(
             _handle,
             insertAfter,
-            (int)Math.Round(Box.X),
-            (int)Math.Round(Box.Y),
+            clientPosition.X,
+            clientPosition.Y,
             Math.Max(1, (int)Math.Round(Box.Width)),
             Math.Max(1, (int)Math.Round(Box.Height)),
             Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);

@@ -1,13 +1,13 @@
 ﻿<#
 .SYNOPSIS
-    DesktopBox 一键发布脚本:编译 -> 测试 -> 发布单文件 -> 打包 DLL -> 清理。
+    DesktopBox 一键发布脚本:编译 -> 测试 -> 发布单文件 -> 打包右键菜单 helper -> 清理。
     可选:打 tag + 创建 GitHub Release 并上传 zip(需 -Publish 开关,且已 gh auth login)。
 
 .DESCRIPTION
     版本号从 src/DesktopBox/DesktopBox.csproj 的 <Version> 自动读取,无需在脚本里硬编码。
     产出:
       publish/DesktopBox.exe              单文件绿色版(~74MB,self-contained)
-      publish/DesktopBox.ShellMenu.dll    原生右键菜单 DLL
+      publish/DesktopBox.ShellMenu.exe    原生右键菜单 helper
       release/DesktopBox-<ver>-win-x64.zip  发布包(上述两个文件)
 
 .PARAMETER Publish
@@ -80,19 +80,21 @@ dotnet publish src/DesktopBox/DesktopBox.csproj `
     -o publish --nologo
 if ($LASTEXITCODE -ne 0) { throw "发布失败" }
 
-# ---------- 4. 原生右键菜单 DLL ----------
-Write-Host "`n==> [4/5] 构建 DesktopBox.ShellMenu.dll..." -ForegroundColor Green
+# ---------- 4. 原生右键菜单 helper ----------
+Write-Host "`n==> [4/5] 构建 DesktopBox.ShellMenu.exe..." -ForegroundColor Green
 & (Join-Path $repoRoot 'src/DesktopBox.ShellMenu/build_dll.bat')
-if ($LASTEXITCODE -ne 0) { throw "ShellMenu DLL 构建失败" }
+if ($LASTEXITCODE -ne 0) { throw "ShellMenu helper 构建失败" }
 
-# 清理副产物(pdb/exp/lib 对终端用户无用)
-foreach ($junk in 'DesktopBox.pdb', 'DesktopBox.ShellMenu.exp', 'DesktopBox.ShellMenu.lib') {
+# 清理副产物(pdb 对终端用户无用)
+foreach ($junk in 'DesktopBox.pdb') {
     Remove-Item -Force (Join-Path $repoRoot "publish/$junk") -ErrorAction SilentlyContinue
 }
 
 # 快速冒烟:exe 能启动
 $exe = Join-Path $repoRoot 'publish/DesktopBox.exe'
 if (-not (Test-Path $exe)) { throw "exe 未生成: $exe" }
+$shellMenuExe = Join-Path $repoRoot 'publish/DesktopBox.ShellMenu.exe'
+if (-not (Test-Path $shellMenuExe)) { throw "ShellMenu helper 未生成: $shellMenuExe" }
 Write-Host "==> 启动冒烟测试..." -ForegroundColor Green
 $p = Start-Process $exe -PassThru
 Start-Sleep -Seconds 4
@@ -114,7 +116,7 @@ $zipPath = Join-Path $releaseDir $zipName
 Remove-Item -Force $zipPath -ErrorAction SilentlyContinue
 Compress-Archive -Path `
     (Join-Path $repoRoot 'publish/DesktopBox.exe'), `
-    (Join-Path $repoRoot 'publish/DesktopBox.ShellMenu.dll') `
+    (Join-Path $repoRoot 'publish/DesktopBox.ShellMenu.exe') `
     -DestinationPath $zipPath
 $zipSize = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
 Write-Host "==> 产出: $zipPath ($zipSize MB)" -ForegroundColor Cyan
@@ -153,7 +155,7 @@ if (-not $Notes) {
         $Notes = Get-Content -Raw -Encoding UTF8 $notesFilePath
         Write-Host "    使用 notes 文件: release\v$version-notes.md" -ForegroundColor DarkGray
     } else {
-        $Notes = "DesktopBox $tagName 发布包.`n`n绿色版,解压即用(含主程序 + 原生右键菜单 DLL)。`n运行环境:Windows 10/11 (64-bit),无需安装 .NET。"
+        $Notes = "DesktopBox $tagName 发布包.`n`n绿色版,解压即用(含主程序 + 原生右键菜单 helper)。`n运行环境:Windows 10/11 (64-bit),无需安装 .NET。"
     }
 }
 

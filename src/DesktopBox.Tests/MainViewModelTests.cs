@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using DesktopBox.Models;
@@ -102,6 +103,29 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void Save_WhenPersistenceFails_RaisesFailureNotification()
+    {
+        var vm = NewVm();
+        var failure = new IOException("disk full");
+        _store.Setup(s => s.Save(It.IsAny<AppConfig>())).Throws(failure);
+        Exception? reported = null;
+        vm.PersistenceFailed += (_, error) => reported = error;
+
+        vm.Save();
+
+        reported.Should().BeSameAs(failure);
+    }
+
+    [Fact]
+    public void TrySave_ReturnsFalseWhenPersistenceFails()
+    {
+        var vm = NewVm();
+        _store.Setup(s => s.Save(It.IsAny<AppConfig>())).Throws(new IOException("disk full"));
+
+        vm.TrySave().Should().BeFalse();
+    }
+
+    [Fact]
     public void SystemIconChanged_DeduplicatesSystemIconPathsBeforeExtraction()
     {
         var vm = NewVm();
@@ -176,6 +200,72 @@ public class MainViewModelTests
         SpinWait.SpinUntil(() => Volatile.Read(ref calls) >= 2, TimeSpan.FromSeconds(2)).Should().BeTrue();
         Thread.Sleep(200);
         Volatile.Read(ref calls).Should().Be(2);
+    }
+
+    [Fact]
+    public void DesktopFileNotification_RetainsTemporarilyUnavailableReference()
+    {
+        var vm = NewVm();
+        var box = new BoxViewModel(new Box
+        {
+            Name = "offline",
+            Items =
+            {
+                new BoxItem
+                {
+                    Type = ItemType.File,
+                    TargetPath = @"Z:\temporarily-offline\document.txt",
+                    DisplayName = "document.txt"
+                }
+            }
+        });
+        vm.Boxes.Add(box);
+
+        _shellChange.Raise(s => s.DesktopFilesChanged += null, EventArgs.Empty);
+
+        box.Items.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Dispose_CancelsPendingSaveAndUnsubscribesLongLivedEvents()
+    {
+        var vm = NewVm();
+        vm.ScheduleSave();
+
+        vm.Dispose();
+        Thread.Sleep(500);
+
+        _store.Verify(s => s.Save(It.IsAny<AppConfig>()), Times.Never);
+        _localizer.VerifyRemove(l => l.LanguageChanged -= It.IsAny<EventHandler>(), Times.Once);
+        _shellChange.VerifyRemove(s => s.SystemIconChanged -= It.IsAny<EventHandler>(), Times.Once);
+    }
+
+    [Fact]
+    public void ScheduleSave_RemovesTimerInstalledDuringConcurrentDispose()
+    {
+        var source = File.ReadAllText(FindRepositoryFile(
+            "src", "DesktopBox", "ViewModels", "MainViewModel.cs"));
+        var start = source.IndexOf("public void ScheduleSave()", StringComparison.Ordinal);
+        var end = source.IndexOf("public void Save()", start, StringComparison.Ordinal);
+        var body = source[start..end];
+
+        body.Should().Contain("Interlocked.CompareExchange(ref _debounce, null, timer)");
+        body.Should().Contain("if (_disposed)");
+        body.IndexOf("Interlocked.CompareExchange", StringComparison.Ordinal)
+            .Should().BeGreaterThan(body.IndexOf("Interlocked.Exchange(ref _debounce, timer)", StringComparison.Ordinal));
+    }
+
+    private static string FindRepositoryFile(params string[] parts)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(new[] { directory.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate)) return candidate;
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException(string.Join(Path.DirectorySeparatorChar, parts));
     }
 
     // ToggleDesktopIcons 依赖 GUI 对话框(InputDialog.Inform),命令末尾会弹窗,

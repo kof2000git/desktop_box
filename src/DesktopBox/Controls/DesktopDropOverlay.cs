@@ -48,14 +48,15 @@ public sealed class DesktopDropOverlay : IDisposable
         var bounds = GetVirtualDesktopBounds();
         if (bounds.Width <= 0 || bounds.Height <= 0)
             return null;
+        var clientPosition = Native.User32.ScreenPointToClient(parent, bounds.Left, bounds.Top);
 
         var parameters = new HwndSourceParameters("DesktopBox.DropOverlay")
         {
             ParentWindow = parent,
             WindowStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
             ExtendedWindowStyle = WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-            PositionX = (int)Math.Floor(bounds.Left),
-            PositionY = (int)Math.Floor(bounds.Top),
+            PositionX = clientPosition.X,
+            PositionY = clientPosition.Y,
             Width = Math.Max(1, (int)Math.Ceiling(bounds.Width)),
             Height = Math.Max(1, (int)Math.Ceiling(bounds.Height)),
             UsesPerPixelOpacity = false
