@@ -12,6 +12,7 @@
 #define DBX_CMD_LAST  0x6FFF
 #define DBX_ID_REMOVE 0x7000
 #define DBX_RESULT_FAILED 0x7001
+#define DBX_RESULT_TARGET_DELETED 0x7002
 
 // Unicode build still sees CFSTR_PREFERREDDROPEFFECT as a narrow SDK macro here.
 static const wchar_t* kPreferredDropEffectFormat = L"Preferred DropEffect";
@@ -25,6 +26,14 @@ static bool EqualsVerb(const wchar_t* actual, const wchar_t* expected) {
 
 static bool IsPropertiesCommand(const std::wstring& verb) {
     return EqualsVerb(verb.c_str(), L"properties");
+}
+
+static bool IsDeleteCommand(const std::wstring& verb) {
+    return EqualsVerb(verb.c_str(), L"delete");
+}
+
+static bool IsEmptyRecycleBinCommand(const std::wstring& verb) {
+    return EqualsVerb(verb.c_str(), L"empty");
 }
 
 static bool ShowShellProperties(const wchar_t* path, HWND owner) {
@@ -216,6 +225,12 @@ static int ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
             if (shown) result = 0;
             goto cleanup;
         }
+        if (IsEmptyRecycleBinCommand(verb)) {
+            hr = SHEmptyRecycleBinW(nullptr, nullptr, 0);
+            DbgLog("SHEmptyRecycleBin", hr);
+            result = 0;
+            goto cleanup;
+        }
 
         CMINVOKECOMMANDINFOEX info = {};
         info.cbSize = sizeof(info);
@@ -232,7 +247,7 @@ static int ShowShellMenu(const wchar_t* path, int screenX, int screenY) {
             } else if (EqualsVerb(verb.c_str(), L"copy")) {
                 DbgLog(SetFileClipboard(path, DROPEFFECT_COPY) ? "SetFileClipboard-copy-OK" : "SetFileClipboard-copy-FAIL");
             }
-            result = 0;
+            result = IsDeleteCommand(verb) ? DBX_RESULT_TARGET_DELETED : 0;
         }
     }
 

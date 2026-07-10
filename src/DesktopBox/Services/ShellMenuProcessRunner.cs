@@ -9,6 +9,7 @@ namespace DesktopBox.Services;
 public sealed class ShellMenuProcessRunner : IShellMenuRunner
 {
     public const int RemoveFromBoxExitCode = 0x7000;
+    public const int TargetDeletedExitCode = 0x7002;
 
     private readonly string _helperPath;
     private readonly TimeSpan _timeout;
@@ -90,6 +91,7 @@ public sealed class ShellMenuProcessRunner : IShellMenuRunner
             {
                 0 => new(ShellMenuRunStatus.Completed, process.ExitCode),
                 RemoveFromBoxExitCode => new(ShellMenuRunStatus.RemoveFromBox, process.ExitCode),
+                TargetDeletedExitCode => new(ShellMenuRunStatus.TargetDeleted, process.ExitCode),
                 _ => new(ShellMenuRunStatus.Crashed, process.ExitCode)
             };
         }

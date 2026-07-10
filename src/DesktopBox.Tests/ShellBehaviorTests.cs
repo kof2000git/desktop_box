@@ -451,6 +451,19 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public async Task ShellMenuProcessRunner_ReturnsTargetDeletedCodeFromSuccessfulHelper()
+    {
+        var runner = new ShellMenuProcessRunner(
+            Environment.GetEnvironmentVariable("ComSpec")!,
+            TimeSpan.FromSeconds(2),
+            ["/d", "/c", "exit /b 28674"]);
+
+        var result = await runner.ShowAsync("ignored", 0, 0);
+
+        result.Status.Should().Be(ShellMenuRunStatus.TargetDeleted);
+    }
+
+    [Fact]
     public async Task ShellMenuProcessRunner_ReturnsNullWhenHelperIsMissing()
     {
         var runner = new ShellMenuProcessRunner(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.exe"));
@@ -528,6 +541,19 @@ public class ShellBehaviorTests
     }
 
     [Fact]
+    public void NativeShellMenu_ReportsDeleteAndUsesVisibleRecycleBinConfirmation()
+    {
+        var source = File.ReadAllText(FindRepositoryFile(
+            "src", "DesktopBox.ShellMenu", "DesktopBox.ShellMenu.cpp"));
+
+        source.Should().Contain("DBX_RESULT_TARGET_DELETED");
+        source.Should().Contain("IsDeleteCommand");
+        source.Should().Contain("IsEmptyRecycleBinCommand");
+        source.Should().Contain("SHEmptyRecycleBinW(nullptr, nullptr, 0)");
+        source.Should().NotContain("SHERB_NOCONFIRMATION");
+    }
+
+    [Fact]
     public void ItemTile_FallsBackOnlyWhenHelperCouldNotStart()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Controls", "ItemTile.xaml.cs");
@@ -535,6 +561,8 @@ public class ShellBehaviorTests
 
         source.Should().Contain("ShellMenuRunStatus.StartFailed");
         source.Should().Contain("ShellMenuRunStatus.RemoveFromBox");
+        source.Should().Contain("ShellMenuRunStatus.TargetDeleted");
+        source.Should().Contain("RefreshAfterDeleteAsync");
         source.Should().Contain("ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut");
         source.Should().Contain("ShellMenuRunStatus.IsolationUnavailable");
         source.Should().Contain("App.LogError(");

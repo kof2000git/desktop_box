@@ -306,6 +306,9 @@ public partial class ItemTile : UserControl
                         case ShellMenuRunStatus.RemoveFromBox:
                             RemoveFromBox();
                             return;
+                        case ShellMenuRunStatus.TargetDeleted:
+                            await RefreshAfterDeleteAsync(item);
+                            return;
                         case ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut or ShellMenuRunStatus.IsolationUnavailable:
                             App.LogError(
                                 new InvalidOperationException(
@@ -351,6 +354,20 @@ public partial class ItemTile : UserControl
 
     private static bool TargetExists(string path) =>
         File.Exists(path) || Directory.Exists(path);
+
+    private async Task RefreshAfterDeleteAsync(BoxItem item)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            if (!ReferenceEquals(Item, item)) return;
+            if (!TargetExists(item.TargetPath))
+            {
+                App.Services.GetRequiredService<ViewModels.MainViewModel>().RemoveItemAnywhere(item);
+                return;
+            }
+            await Task.Delay(100);
+        }
+    }
 
     private void NotifyTargetUnavailable()
     {

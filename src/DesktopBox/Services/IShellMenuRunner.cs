@@ -4,6 +4,7 @@ public enum ShellMenuRunStatus
 {
     Completed,
     RemoveFromBox,
+    TargetDeleted,
     StartFailed,
     IsolationUnavailable,
     Crashed,
