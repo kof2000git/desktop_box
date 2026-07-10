@@ -35,7 +35,9 @@ public class ResourceLifecycleTests
         cleanup.Should().Contain("foreach (var window in _boxWindows.Values.ToList())");
         cleanup.Should().Contain("window.CloseForRemoval();");
         cleanup.Should().Contain("_boxWindows.Clear();");
-        source.Should().Contain("DisposeOwnedResources();\n        Application.Current.Shutdown();");
+        var quit = Between(source, "private void OnQuit(", "protected override void OnClosed(");
+        quit.IndexOf("DisposeOwnedResources();", StringComparison.Ordinal)
+            .Should().BeLessThan(quit.IndexOf("Application.Current.Shutdown();", StringComparison.Ordinal));
         source.Should().Contain("protected override void OnClosed(EventArgs e)");
     }
 
