@@ -15,6 +15,7 @@
     <s:String x:Key="menu.addSysIcons">Add System Icons Box</s:String>
     <s:String x:Key="menu.organize">Tidy Desktop</s:String>
     <s:String x:Key="menu.toggleIcons">Hide/Show Desktop Icons</s:String>
+    <s:String x:Key="menu.refreshItems">Refresh Missing Icons</s:String>
     <s:String x:Key="menu.settings">Settings</s:String>
     <s:String x:Key="menu.quit">Quit</s:String>
     <s:String x:Key="menu.view">View</s:String>
@@ -28,6 +29,7 @@
 
     <s:String x:Key="box.menu.rename">Rename Box</s:String>
     <s:String x:Key="box.menu.removeSelected">Remove Selected from Box</s:String>
+    <s:String x:Key="box.menu.refreshItems">Refresh Missing Icons</s:String>
     <s:String x:Key="box.menu.clear">Clear Box</s:String>
     <s:String x:Key="box.menu.newTab">New Tab</s:String>
     <s:String x:Key="box.menu.renameTab">Rename Tab</s:String>
@@ -83,6 +85,7 @@
     <s:String x:Key="dialog.openFail">Cannot open: {0}</s:String>
     <s:String x:Key="dialog.targetGone">The target of "{0}" is currently unavailable. It may have moved, been deleted, or be on an offline drive or network location.&#x0a;&#x0a;The reference will remain in the box; remove it manually from the context menu when no longer needed.</s:String>
     <s:String x:Key="dialog.shellMenuFailed">The system context-menu process crashed or timed out. This operation was stopped; try again. The box reference was not removed.</s:String>
+    <s:String x:Key="dialog.refreshItems.done">Removed {0} missing icon reference(s).</s:String>
     <s:String x:Key="dialog.unhandledError">An error occurred, but the program will keep running:&#x0a;&#x0a;{0}</s:String>
     <s:String x:Key="dialog.fatalError">The application encountered an error it cannot safely recover from and will exit. Details were written to the log:&#x0a;&#x0a;{0}</s:String>
     <s:String x:Key="dialog.startupConfigFailed">The configuration file cannot be read right now. DesktopBox will exit to avoid overwriting data. Close any sync or security software holding the file, then try again:&#x0a;&#x0a;{0}</s:String>

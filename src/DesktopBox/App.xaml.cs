@@ -77,6 +77,18 @@ public partial class App : Application
             // 界面语言:检测系统语言或用手动设置(默认 auto=跟随系统)
             Services.GetRequiredService<ILocalizerService>().Apply(cfg.Settings.Language);
 
+            // 开机自启:配置要求开启时重写 Run 项(修正迁移/升级后路径失效);已注册则刷新当前 exe 路径。
+            try
+            {
+                var startup = Services.GetRequiredService<IStartupService>();
+                if (cfg.Settings.AutoStart || startup.IsEnabled())
+                    startup.Enable();
+            }
+            catch (Exception ex)
+            {
+                LogError(ex, "App.EnsureAutoStart");
+            }
+
             var main = Services.GetRequiredService<MainWindow>();
             main.Show();
         }

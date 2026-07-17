@@ -271,4 +271,67 @@ public class MainViewModelTests
     // ToggleDesktopIcons 依赖 GUI 对话框(InputDialog.Inform),命令末尾会弹窗,
     // 无法在无界面测试中执行。其逻辑仅为"翻转并调用 SetVisible",靠桌面图标服务的
     // 手动验证覆盖。
+
+    [Fact]
+    public void PruneMissingItems_RemovesOnlyMissingLocalTargets()
+    {
+        var existing = Path.Combine(Path.GetTempPath(), $"dbx-exist-{Guid.NewGuid():N}.txt");
+        File.WriteAllText(existing, "ok");
+        var missing = Path.Combine(Path.GetTempPath(), $"dbx-missing-{Guid.NewGuid():N}.txt");
+        try
+        {
+            _store.Setup(s => s.Load()).Returns(new AppConfig
+            {
+                Boxes =
+                [
+                    new Box
+                    {
+                        Name = "B",
+                        Items =
+                        [
+                            new BoxItem { Type = ItemType.File, TargetPath = existing, DisplayName = "live" },
+                            new BoxItem { Type = ItemType.File, TargetPath = missing, DisplayName = "gone" },
+                            new BoxItem { Type = ItemType.SystemIcon, TargetPath = "::{645FF040-5081-101B-9F08-00AA002F954E}", DisplayName = "Recycle" },
+                            new BoxItem { Type = ItemType.Url, TargetPath = "https://example.com", DisplayName = "web" },
+                        ]
+                    }
+                ]
+            });
+            var vm = new MainViewModel(_store.Object, new DropParserService(), _icon.Object, _organize.Object, _categorizer.Object, _desktopIcons.Object, _localizer.Object, _shellChange.Object);
+            vm.LoadCommand.Execute(null);
+
+            var removed = vm.PruneMissingItems();
+
+            removed.Should().Be(1);
+            vm.Boxes[0].Items.Should().HaveCount(3);
+            vm.Boxes[0].Items.Select(i => i.DisplayName).Should().BeEquivalentTo("live", "Recycle", "web");
+        }
+        finally
+        {
+            if (File.Exists(existing)) File.Delete(existing);
+        }
+    }
+
+    [Fact]
+    public void IsMissingLocalTarget_KeepsSystemIconsAndUrls()
+    {
+        MainViewModel.IsMissingLocalTarget(new BoxItem
+        {
+            Type = ItemType.SystemIcon,
+            TargetPath = "::{645FF040-5081-101B-9F08-00AA002F954E}"
+        }).Should().BeFalse();
+
+        MainViewModel.IsMissingLocalTarget(new BoxItem
+        {
+            Type = ItemType.Url,
+            TargetPath = "https://example.com"
+        }).Should().BeFalse();
+
+        var missing = Path.Combine(Path.GetTempPath(), $"dbx-nope-{Guid.NewGuid():N}.txt");
+        MainViewModel.IsMissingLocalTarget(new BoxItem
+        {
+            Type = ItemType.File,
+            TargetPath = missing
+        }).Should().BeTrue();
+    }
 }

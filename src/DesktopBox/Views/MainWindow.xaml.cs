@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using DesktopBox.Controls;
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     private Forms.NotifyIcon? _tray;
     private Icon? _trayIcon;
     private bool _ownedResourcesDisposed;
+    private Timer? _desktopHostRetry;
     private DateTime _lastPersistenceFailureNotificationUtc;
 
     public MainWindow(MainViewModel vm, SettingsViewModel settingsVm, SettingsWindow settings)
@@ -55,6 +57,8 @@ public partial class MainWindow : Window
         base.OnContentRendered(e);
         Hide();
         RefreshDesktopLayer();
+        // 开机自启时资源管理器桌面层可能尚未就绪,周期性重试挂接盒子窗口。
+        ScheduleDesktopHostRetry();
     }
 
     // 系统图标自动刷新:窗口句柄就绪后注册接收 shell 变化通知(回收站空/满切换等),
@@ -118,11 +122,49 @@ public partial class MainWindow : Window
         menu.Items.Add(_localizer["menu.addSysIcons"], null, (_, _) => _vm.AddSystemIconsBoxCommand.Execute(null));
         menu.Items.Add(_localizer["menu.organize"], null, (_, _) => OrganizeAndShowBoxes());
         menu.Items.Add(_localizer["menu.toggleIcons"], null, (_, _) => _vm.ToggleDesktopIconsCommand.Execute(null));
+        menu.Items.Add(_localizer["menu.refreshItems"], null, (_, _) => RefreshMissingItemsFromTray());
         menu.Items.Add(_localizer["menu.settings"], null, (_, _) => OnOpenSettings(null, null));
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(_localizer["menu.quit"], null, (_, _) => OnQuit(null, null));
         _tray.ContextMenuStrip = menu;
         oldMenu?.Dispose();
+    }
+
+    private void RefreshMissingItemsFromTray()
+    {
+        var removed = _vm.PruneMissingItems();
+        RefreshDesktopLayer();
+        if (_tray is null) return;
+        var message = string.Format(_localizer["dialog.refreshItems.done"], removed);
+        _tray.ShowBalloonTip(4000, _localizer["app.name"], message, Forms.ToolTipIcon.Info);
+    }
+
+    private void ScheduleDesktopHostRetry()
+    {
+        _desktopHostRetry?.Dispose();
+        var attempts = 0;
+        _desktopHostRetry = new Timer(_ =>
+        {
+            attempts++;
+            var disp = Application.Current?.Dispatcher;
+            if (disp is null || disp.HasShutdownStarted || _ownedResourcesDisposed)
+            {
+                Interlocked.Exchange(ref _desktopHostRetry, null)?.Dispose();
+                return;
+            }
+
+            disp.BeginInvoke(new Action(() =>
+            {
+                if (_ownedResourcesDisposed) return;
+                RefreshDesktopLayer();
+                var hasHost = _desktopHost != IntPtr.Zero;
+                var hasWindows = _boxWindows.Count > 0 || _vm.Boxes.Count == 0;
+                if ((hasHost && hasWindows) || attempts >= 30)
+                {
+                    Interlocked.Exchange(ref _desktopHostRetry, null)?.Dispose();
+                }
+            }));
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
     }
 
     private void ShowBoxes()
@@ -351,6 +393,7 @@ public partial class MainWindow : Window
             return;
 
         _ownedResourcesDisposed = true;
+        Interlocked.Exchange(ref _desktopHostRetry, null)?.Dispose();
         _vm.Boxes.CollectionChanged -= OnBoxesChanged;
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
         _vm.PersistenceFailed -= OnPersistenceFailed;

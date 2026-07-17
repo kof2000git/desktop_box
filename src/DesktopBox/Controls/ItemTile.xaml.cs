@@ -285,6 +285,14 @@ public partial class ItemTile : UserControl
         }
 
         e.Handled = true;
+
+        // 目标已不存在时 helper 常崩溃/失败,直接弹出精简菜单(含"从盒子移除")。
+        if (IsLocalPathItem(item) && !TargetExists(item.TargetPath))
+        {
+            ShowFallbackMenu();
+            return;
+        }
+
         if (!await ShellMenuGate.WaitAsync(0))
             return;
 
@@ -314,6 +322,12 @@ public partial class ItemTile : UserControl
                                 new InvalidOperationException(
                                     $"Shell menu helper {helperResult.Status}; exitCode={helperResult.ExitCode?.ToString() ?? "unknown"}"),
                                 "ItemTile.ShellMenuHelper");
+                            // 目标可能在菜单期间被删掉:优先给可操作的回退菜单,而不是只弹错误。
+                            if (IsLocalPathItem(item) && !TargetExists(item.TargetPath))
+                            {
+                                fallback = true;
+                                break;
+                            }
                             InputDialog.Inform(Localizer["dialog.shellMenuFailed"]);
                             return;
                         case ShellMenuRunStatus.Completed:
@@ -328,10 +342,7 @@ public partial class ItemTile : UserControl
             }
             if (fallback)
             {
-                var menu = BuildContextMenu();
-                menu.PlacementTarget = this;
-                menu.Placement = PlacementMode.Bottom;
-                menu.IsOpen = true;
+                ShowFallbackMenu();
                 return;
             }
 
@@ -346,6 +357,14 @@ public partial class ItemTile : UserControl
         {
             ShellMenuGate.Release();
         }
+    }
+
+    private void ShowFallbackMenu()
+    {
+        var menu = BuildContextMenu();
+        menu.PlacementTarget = this;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private static bool IsLocalPathItem(BoxItem item) =>

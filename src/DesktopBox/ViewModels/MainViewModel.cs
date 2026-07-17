@@ -201,6 +201,40 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>清理目标已不存在的本地文件/文件夹引用(系统图标与网址保留)。返回移除数量。</summary>
+    public int PruneMissingItems()
+    {
+        var missing = AllItems()
+            .Where(IsMissingLocalTarget)
+            .ToList();
+        if (missing.Count == 0) return 0;
+
+        foreach (var item in missing)
+            RemoveItemAnywhere(item);
+        return missing.Count;
+    }
+
+    /// <summary>判断条目是否为本地路径且目标当前不存在(已删/移走)。</summary>
+    public static bool IsMissingLocalTarget(BoxItem item)
+    {
+        if (item.Type is ItemType.SystemIcon or ItemType.Url) return false;
+        var path = item.TargetPath;
+        if (string.IsNullOrWhiteSpace(path)) return true;
+        if (path.StartsWith("::", StringComparison.Ordinal)) return false;
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return false;
+        try
+        {
+            return !File.Exists(path) && !Directory.Exists(path);
+        }
+        catch
+        {
+            // 无法探测时保守保留,避免网络盘短暂离线被误删。
+            return false;
+        }
+    }
+
     // ---- 选中态 + 批量操作(跨盒子):所有 BoxItem.IsSelected 汇总 ----
 
     /// <summary>遍历所有盒子(含标签)的条目。选中操作/批量操作用。</summary>

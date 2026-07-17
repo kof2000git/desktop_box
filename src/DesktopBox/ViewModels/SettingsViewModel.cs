@@ -13,6 +13,7 @@ public partial class SettingsViewModel : ObservableObject
     private bool _persistedFollowSystemTheme;
     private bool _persistedIsDark;
     private string _persistedLanguage = "auto";
+    private bool _persistedAutoStart;
     private bool _isRollingBack;
 
     public event EventHandler<Exception>? PersistenceFailed;
@@ -37,7 +38,8 @@ public partial class SettingsViewModel : ObservableObject
         _localizer = localizer;
 
         var cfg = store.Load();
-        _autoStart = startup.IsEnabled();
+        // Prefer live registry state; config is a durable preference used to re-apply after upgrades/moves.
+        _autoStart = startup.IsEnabled() || cfg.Settings.AutoStart;
         _followSystemTheme = cfg.Settings.FollowSystemTheme;
         _isDark = _followSystemTheme ? _theme.IsSystemDark()
             : cfg.Settings.Theme.Equals("Dark", StringComparison.OrdinalIgnoreCase);
@@ -45,12 +47,29 @@ public partial class SettingsViewModel : ObservableObject
         _persistedFollowSystemTheme = _followSystemTheme;
         _persistedIsDark = _isDark;
         _persistedLanguage = _language;
+        _persistedAutoStart = _autoStart;
     }
 
     partial void OnAutoStartChanged(bool value)
     {
-        if (value) _startup.Enable();
-        else _startup.Disable();
+        if (_isRollingBack) return;
+        try
+        {
+            if (value) _startup.Enable();
+            else _startup.Disable();
+
+            var cfg = _store.Load();
+            cfg.Settings.AutoStart = value;
+            _store.Save(cfg);
+            _persistedAutoStart = value;
+        }
+        catch (Exception ex)
+        {
+            _isRollingBack = true;
+            try { AutoStart = _persistedAutoStart; }
+            finally { _isRollingBack = false; }
+            ReportPersistenceFailure(ex);
+        }
     }
 
     partial void OnFollowSystemThemeChanged(bool value)

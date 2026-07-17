@@ -297,6 +297,12 @@ public partial class BoxControl : UserControl
         MainVm.RemoveSelected();
     }
 
+    private void OnRefreshItems(object sender, RoutedEventArgs e)
+    {
+        var removed = MainVm.PruneMissingItems();
+        InputDialog.Inform(string.Format(Localizer["dialog.refreshItems.done"], removed));
+    }
+
     private void OnDelete(object sender, RoutedEventArgs e)
     {
         if (Vm is null) return;

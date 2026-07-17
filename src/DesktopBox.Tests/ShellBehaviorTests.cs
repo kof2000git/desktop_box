@@ -554,7 +554,7 @@ public class ShellBehaviorTests
     }
 
     [Fact]
-    public void ItemTile_FallsBackOnlyWhenHelperCouldNotStart()
+    public void ItemTile_FallsBackWhenHelperCouldNotStartOrTargetMissing()
     {
         var sourcePath = FindRepositoryFile("src", "DesktopBox", "Controls", "ItemTile.xaml.cs");
         var source = File.ReadAllText(sourcePath);
@@ -567,6 +567,8 @@ public class ShellBehaviorTests
         source.Should().Contain("ShellMenuRunStatus.IsolationUnavailable");
         source.Should().Contain("App.LogError(");
         source.Should().Contain("ItemTile.ShellMenuHelper");
+        source.Should().Contain("IsLocalPathItem(item) && !TargetExists(item.TargetPath)");
+        source.Should().Contain("ShowFallbackMenu");
     }
 
     [Fact]
