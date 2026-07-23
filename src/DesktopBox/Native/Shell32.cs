@@ -77,7 +77,7 @@ public static class Shell32
         uint fEvents,           // 关注的事件 SHCNE_*
         uint wMsg,              // shell 把通知作为此消息号发送给 hwnd
         int cEntries,
-        ref SHChangeNotifyEntry[] pfsne);
+        [In] ref SHChangeNotifyEntry pfsne);
 
     /// <summary>取消注册。</summary>
     [DllImport("shell32.dll")]
@@ -88,6 +88,7 @@ public static class Shell32
     public struct SHChangeNotifyEntry
     {
         public IntPtr pidl;
+        [MarshalAs(UnmanagedType.Bool)]
         public bool fRecursive;
     }
 

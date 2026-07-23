@@ -79,8 +79,8 @@ public class ShellChangeNotifierService : IShellChangeNotifierService, IDisposab
     private bool RegisterScope(IntPtr hwnd, uint events, IntPtr pidl, bool recursive, string scope)
     {
         const uint sources = Shell32.SHCNRF_ShellLevel | Shell32.SHCNRF_InterruptLevel;
-        var entries = new[] { new Shell32.SHChangeNotifyEntry { pidl = pidl, fRecursive = recursive } };
-        var id = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, entries.Length, ref entries);
+        var entry = new Shell32.SHChangeNotifyEntry { pidl = pidl, fRecursive = recursive };
+        var id = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, 1, ref entry);
         if (id != 0)
         {
             _notifyIds.Add(id);

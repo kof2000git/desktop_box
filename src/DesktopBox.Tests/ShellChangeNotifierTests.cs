@@ -37,6 +37,17 @@ public class ShellChangeNotifierTests
     }
 
     [Fact]
+    public void ChangeNotifyRegister_UsesPointerToSingleEntry()
+    {
+        var parameter = typeof(Shell32)
+            .GetMethod(nameof(Shell32.SHChangeNotifyRegister))!
+            .GetParameters()
+            .Last();
+
+        parameter.ParameterType.Should().Be(typeof(Shell32.SHChangeNotifyEntry).MakeByRefType());
+    }
+
+    [Fact]
     public void Dispose_CancelsPendingNotificationDelivery()
     {
         var service = new ShellChangeNotifierService();
