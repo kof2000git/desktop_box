@@ -192,6 +192,10 @@ public class ShellBehaviorTests
         xaml.Should().Contain("Path=ViewportWidth");
         xaml.Should().Contain("AncestorType=ItemsControl");
         xaml.Should().Contain("ActualWidth");
+        // 防布局反馈振荡：垂直滚动条必须恒占位(Visible)。Auto 会在缩放过阈值时
+        // 显隐翻转→ViewportWidth 变化→WrapPanel 重排→高度变化→再次翻转，64 磁贴跳行，
+        // 透过 layered 窗拉伸成"窗口忽大忽小"。恒占位断环。
+        xaml.Should().Contain("VerticalScrollBarVisibility=\"Visible\"");
     }
 
     [Fact]

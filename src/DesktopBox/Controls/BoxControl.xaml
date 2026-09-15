@@ -138,7 +138,7 @@
             <!-- 条目列表(当前标签 / Items):按 ViewMode 切换布局 -->
             <ScrollViewer x:Name="ItemsScroll"
                           Grid.Row="2"
-                          VerticalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Visible"
                           HorizontalScrollBarVisibility="Disabled"
                           Background="Transparent"
                           PreviewMouseLeftButtonDown="OnItemsAreaMouseDown"
