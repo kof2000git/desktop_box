@@ -65,6 +65,7 @@ public sealed class BoxWindow : IDisposable
     private uint _pendingExtraFlags;
     private int _lastX = int.MinValue, _lastY = int.MinValue, _lastW, _lastH;
     private double _lastContentW, _lastContentH;
+    private DateTime _lastWriteLogUtc;
 
     /// <summary>诊断快照：HWND/可见性/实际矩形/父窗口/模型坐标，用于定位"盒子不可见"。</summary>
     public string Describe()
@@ -190,6 +191,14 @@ public sealed class BoxWindow : IDisposable
         _lastY = clientPosition.Y;
         _lastW = w;
         _lastH = h;
+        // 诊断（缩放抖动调查）：记录每次真正的窗口写入，来源+矩形+距上次的间隔。
+        var gap = (now - _lastWriteLogUtc).TotalMilliseconds;
+        if (gap >= 15)
+        {
+            _lastWriteLogUtc = now;
+            Services.LogService.Info("BoxWindow.Write",
+                $"hwnd=0x{_handle:X} rect=({clientPosition.X},{clientPosition.Y},{w}x{h}) dz={gap:0}ms noz={(extraFlags & Native.User32.SWP_NOZORDER) != 0}");
+        }
         Native.User32.SetWindowPos(
             _handle,
             insertAfter,

@@ -342,6 +342,11 @@ public partial class MainWindow : Window
         {
             if (!liveIds.Contains(id) || !window.IsHandleAlive)
             {
+                // 诊断（缩放抖动调查）：窗口被销毁/移除时留痕——若是拖动中被销毁重建，
+                // 就会出现"同盒子两块画面/尺寸跳变"。
+                bool wasAlive = window.IsHandleAlive;
+                Services.LogService.Warn("DesktopHost.Dispose",
+                    $"{(wasAlive ? "非存活" : "已不在集合")} 移除窗 id={id} {window.Describe()}");
                 _boxWindows.Remove(id);
                 window.CloseForRemoval();
                 removed++;

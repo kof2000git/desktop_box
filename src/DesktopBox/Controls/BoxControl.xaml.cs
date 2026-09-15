@@ -170,27 +170,51 @@ public partial class BoxControl : UserControl
         _resizeBoxOrigin = new Rect(Vm.X, Vm.Y, Vm.Width, Vm.Height);
         _resizeDx = 0;
         _resizeDy = 0;
+        _resizeDir = (sender as FrameworkElement)?.Tag as string ?? "SE";
+        // 诊断（缩放抖动调查）：记录起点与方向。若拖动中再次出现 Start（capture 被打断重捕获），
+        // 会直接看到连续两条 Start。
+        Services.LogService.Info("BoxResize.Start",
+            $"dir={_resizeDir} origin=({_resizeBoxOrigin.X:0},{_resizeBoxOrigin.Y:0},{_resizeBoxOrigin.Width:0}x{_resizeBoxOrigin.Height:0})");
     }
+
+    private string _resizeDir = "SE";
 
     private void OnResize(object sender, DragDeltaEventArgs e)
     {
         if (!_isResizing || Vm is null) return;
         var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
+        if (dir != _resizeDir)
+        {
+            // 诊断（缩放抖动调查）：拖动中方向变了 = capture 在 Thumb 之间漂移，
+            // 累积位移配错方向会把盒子一把拽到最小尺寸（"忽大忽小"的头号嫌疑）。
+            Services.LogService.Warn("BoxResize.DirSwitch",
+                $"dir {_resizeDir} -> {dir} dx={_resizeDx:0} dy={_resizeDy:0}");
+            _resizeDir = dir;
+        }
         var scale = GetDpiScale();
         _resizeDx += e.HorizontalChange * scale.X;
         _resizeDy += e.VerticalChange * scale.Y;
 
         var resized = BoxResize.Apply(_resizeBoxOrigin, dir, _resizeDx, _resizeDy);
+        if (resized.Width < _lastLoggedW - 40 || resized.Height < _lastLoggedH - 40)
+            Services.LogService.Warn("BoxResize.Shrink",
+                $"dir={dir} dx={_resizeDx:0} dy={_resizeDy:0} -> {resized.Width:0}x{resized.Height:0}");
+        _lastLoggedW = resized.Width;
+        _lastLoggedH = resized.Height;
         Vm.X = resized.X;
         Vm.Y = resized.Y;
         Vm.Width = resized.Width;
         Vm.Height = resized.Height;
     }
 
+    private double _lastLoggedW, _lastLoggedH;
+
     private void OnResizeCompleted(object sender, DragCompletedEventArgs e)
     {
         if (!_isResizing) return;
         _isResizing = false;
+        Services.LogService.Info("BoxResize.Done",
+            $"dir={_resizeDir} final={Vm.Width:0}x{Vm.Height:0} at ({Vm.X:0},{Vm.Y:0})");
         MainVm.ScheduleSave();
     }
 
