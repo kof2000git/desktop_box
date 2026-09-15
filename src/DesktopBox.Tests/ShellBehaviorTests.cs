@@ -123,15 +123,21 @@ public class ShellBehaviorTests
     [Fact]
     public void MainWindow_UsesShellDefViewAsPrimaryVisibleDesktopHost()
     {
-        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Views", "MainWindow.xaml.cs");
+        // 宿主解析已收敛到 Native.User32.ResolveDesktopHost（单入口，主窗口/覆盖层共用）。
+        var sourcePath = FindRepositoryFile("src", "DesktopBox", "Native", "User32.cs");
         var source = File.ReadAllText(sourcePath);
 
+        source.Should().Contain("ResolveDesktopHost");
         source.Should().Contain("FindShellDefView");
         source.Should().Contain("GetProgman");
-        // 稳定优先：Progman 和图标同级、不抢 DefView 绘制，所以优先 Progman；
-        // DefView 只在 Progman 拿不到时用（来回切父是桌面抖动主因）。
-        source.IndexOf("GetProgman", StringComparison.Ordinal)
-            .Should().BeLessThan(source.IndexOf("FindShellDefView", StringComparison.Ordinal));
+        // 可见优先：DefView 是图标层本身，盒子挂它下面天然在壁纸之上。
+        // v1.7.10 曾改 Progman 优先，Win11 上盒子被盖住不可见，v1.7.13 改回。
+        // （比较 ResolveDesktopHost 方法体内的顺序，而非全文件首次出现位置。）
+        var bodyStart = source.IndexOf("public static IntPtr ResolveDesktopHost", StringComparison.Ordinal);
+        bodyStart.Should().BeGreaterThanOrEqualTo(0);
+        var body = source[bodyStart..];
+        body.IndexOf("FindShellDefView", StringComparison.Ordinal)
+            .Should().BeLessThan(body.IndexOf("GetProgman", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -267,8 +273,8 @@ public class ShellBehaviorTests
         overlay.Should().Contain("BuildExclusionRects");
         overlay.Should().Contain("SetWindowRgn");
         overlay.Should().Contain("RGN_DIFF");
-        overlay.Should().Contain("FindShellDefView");
-        overlay.Should().Contain("GetProgman");
+        // 覆盖层与主窗口共用 Native.User32.ResolveDesktopHost（单入口，DefView 优先保证可见）。
+        overlay.Should().Contain("ResolveDesktopHost");
         drag.Should().Contain("DataFormats.FileDrop");
     }
 

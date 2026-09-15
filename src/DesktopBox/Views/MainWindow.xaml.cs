@@ -304,7 +304,7 @@ public partial class MainWindow : Window
         _lastRefreshUtc = now;
 
         var prev = _desktopHost;
-        _desktopHost = ResolveDesktopHost();
+        _desktopHost = Native.User32.ResolveDesktopHost();
         if (_desktopHost == IntPtr.Zero)
         {
             Services.LogService.Warn("DesktopHost.Resolve", "桌面宿主未就绪（explorer 可能正在启动），等待重试");
@@ -371,6 +371,37 @@ public partial class MainWindow : Window
                 Services.LogService.Info("DesktopHost.Windows",
                     $"{source}: id={id} header={Services.LogService.Truncate(box?.Header)} {window.Describe()}");
             }
+            LogOcclusion(source);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 遮挡检测：IsWindowVisible 只代表"没被隐藏"，被盖住时同样为 true。
+    /// 取首个存活盒子中心点看 WindowFromPoint 落在谁头上——是自己=顶层可见，
+    /// 是别人（DefView/WorkerW…）=被盖住。v1.7.12 日志靠这个确诊了 Progman 遮挡。
+    /// </summary>
+    private void LogOcclusion(string source)
+    {
+        try
+        {
+            var first = _boxWindows.Values.FirstOrDefault(w => w.IsHandleAlive);
+            if (first is null) return;
+            if (!Native.User32.GetWindowRect(first.Handle, out var r)) return;
+            int cx = r.Left + (r.Right - r.Left) / 2;
+            int cy = r.Top + (r.Bottom - r.Top) / 2;
+            var top = Native.User32.WindowFromPoint(cx, cy);
+            var ours = top == first.Handle;
+            string cls = "";
+            try
+            {
+                var sb = new System.Text.StringBuilder(256);
+                Native.User32.GetClassName(top, sb, 256);
+                cls = sb.ToString();
+            }
+            catch { }
+            Services.LogService.Info("DesktopHost.Occlusion",
+                $"{source}: center=({cx},{cy}) top=0x{top:X} class={cls} ours={ours}");
         }
         catch { }
     }
@@ -411,25 +442,8 @@ public partial class MainWindow : Window
         if (!refresh && _desktopHost != IntPtr.Zero && Native.User32.IsWindow(_desktopHost))
             return _desktopHost;
 
-        _desktopHost = ResolveDesktopHost();
+        _desktopHost = Native.User32.ResolveDesktopHost();
         return _desktopHost;
-    }
-
-    /// <summary>
-    /// 单一 host 策略：永远优先 Progman（和图标同级，不抢 DefView 绘制，最稳定）。
-    /// DefView 只在 Progman 拿不到时用；WorkerW（带缓存，只 spawn 一次）最后兜底。
-    /// 来回切父是桌面抖动的主因，所以顺序固定、不翻转。
-    /// </summary>
-    private static IntPtr ResolveDesktopHost()
-    {
-        var progman = Native.User32.GetProgman();
-        if (progman != IntPtr.Zero && Native.User32.IsWindow(progman))
-            return progman;
-        var def = Native.User32.FindShellDefView();
-        if (def != IntPtr.Zero && Native.User32.IsWindow(def))
-            return def;
-        var worker = Native.User32.GetWorkerW();
-        return Native.User32.IsWindow(worker) ? worker : IntPtr.Zero;
     }
 
     private void RestoreTrayIcon()

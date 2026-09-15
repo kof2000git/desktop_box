@@ -126,6 +126,24 @@ public static class User32
     [DllImport("user32.dll")]
     public static extern bool DestroyIcon(IntPtr hIcon);
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    /// <summary>取屏幕点处最上层可见窗口（用于遮挡检测：盒子中心点返回的若不是自己，就是被盖住了）。</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr WindowFromPoint(POINT pt);
+
+    public static IntPtr WindowFromPoint(int x, int y) => WindowFromPoint(new POINT { X = x, Y = y });
+
+    public const uint GA_ROOT = 2;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
     /// <summary>注册一个全局唯一的窗口消息号(用于 shell 变化通知等自定义消息)。</summary>
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern uint RegisterWindowMessage(string lpString);
@@ -191,6 +209,25 @@ public static class User32
             return true;
         }, IntPtr.Zero);
         return workerW;
+    }
+
+    /// <summary>
+    /// 桌面宿主解析（共享唯一入口）。
+    /// DefView 优先：它是图标层本身，盒子作为其子窗口天然在壁纸层之上，保证可见。
+    /// Progman 次之，WorkerW（带缓存，只 spawn 一次）最后兜底。
+    /// 历史：v1.7.10 曾改 Progman 优先降闪烁，结果 Win11 上盒子被盖住不可见
+    /// （v1.7.12 日志：窗 alive/visible 但人眼看不见），v1.7.13 改回 DefView 优先。
+    /// </summary>
+    public static IntPtr ResolveDesktopHost()
+    {
+        var def = FindShellDefView();
+        if (def != IntPtr.Zero && IsWindow(def))
+            return def;
+        var progman = GetProgman();
+        if (progman != IntPtr.Zero && IsWindow(progman))
+            return progman;
+        var worker = GetWorkerW();
+        return IsWindow(worker) ? worker : IntPtr.Zero;
     }
 
     /// <summary>定位桌面图标视图窗口 SHELLDLL_DefView(用于控制桌面图标显隐)。</summary>

@@ -39,10 +39,8 @@ public sealed class DesktopDropOverlay : IDisposable
 
     public static DesktopDropOverlay? TryCreate(IEnumerable<Rect> excludedBounds)
     {
-        // 与 MainWindow 同策略：优先 Progman（和图标同级，不抢 DefView 绘制），稳定优先。
-        var parent = Native.User32.GetProgman();
-        if (parent == IntPtr.Zero || !Native.User32.IsWindow(parent))
-            parent = Native.User32.FindShellDefView();
+        // 与主窗口同策略（Native.User32.ResolveDesktopHost）：DefView 优先保证可见。
+        var parent = Native.User32.ResolveDesktopHost();
         if (parent == IntPtr.Zero || !Native.User32.IsWindow(parent))
             return null;
 
