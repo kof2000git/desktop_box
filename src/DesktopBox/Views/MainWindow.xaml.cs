@@ -189,7 +189,9 @@ public partial class MainWindow : Window
 
     private void ShowBoxes()
     {
-        RefreshDesktopLayer();
+        // 用户显式点"显示盒子"：绕过防抖强制重建 + 落诊断日志，看窗到底建没建。
+        RefreshDesktopLayer(force: true);
+        LogBoxWindows("ShowBoxes");
     }
 
     private void OnLanguageChanged(object? sender, EventArgs e) => RebuildTrayMenu();
@@ -241,7 +243,8 @@ public partial class MainWindow : Window
     private void OrganizeAndShowBoxes()
     {
         _vm.OrganizeCommand.Execute(null);
-        RefreshDesktopLayer();
+        RefreshDesktopLayer(force: true);
+        LogBoxWindows("Organize");
     }
     private void OnToggleIcons(object sender, RoutedEventArgs e) => _vm.ToggleDesktopIconsCommand.Execute(null);
 
@@ -291,12 +294,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void RefreshDesktopLayer()
+    private void RefreshDesktopLayer(bool force = false)
     {
         // 防抖：重试风暴（2s×30）+ 图标切换连刷会狂调 GetWorkerW（0x052C 新建壁纸窗口）。
-        // 200ms 内重复调用直接合并。
+        // 200ms 内重复调用直接合并；用户显式操作（显示盒子/整理）用 force 绕过。
         var now = DateTime.UtcNow;
-        if ((now - _lastRefreshUtc).TotalMilliseconds < 200)
+        if (!force && (now - _lastRefreshUtc).TotalMilliseconds < 200)
             return;
         _lastRefreshUtc = now;
 
@@ -334,19 +337,42 @@ public partial class MainWindow : Window
     private void SyncBoxWindows()
     {
         var liveIds = _vm.Boxes.Select(b => b.Id).ToHashSet();
+        int removed = 0;
         foreach (var (id, window) in _boxWindows.ToList())
         {
             if (!liveIds.Contains(id) || !window.IsHandleAlive)
             {
                 _boxWindows.Remove(id);
                 window.CloseForRemoval();
+                removed++;
             }
         }
 
+        int before = _boxWindows.Count;
         foreach (var box in _vm.Boxes)
             EnsureBoxWindow(box);
 
         RepairBoxWindowsOnDesktopLayer();
+        Services.LogService.Info("DesktopHost.Sync",
+            $"boxes={_vm.Boxes.Count} windows={_boxWindows.Count} new={_boxWindows.Count - before} removed={removed}");
+    }
+
+    /// <summary>诊断：逐窗记录 HWND/可见性/矩形，定位"盒子不可见"（窗没建 vs 建了看不见）。</summary>
+    private void LogBoxWindows(string source)
+    {
+        try
+        {
+            Services.LogService.Info("DesktopHost.Windows",
+                $"{source}: boxes={_vm.Boxes.Count} windows={_boxWindows.Count} host=0x{_desktopHost:X}");
+            foreach (var (id, window) in _boxWindows.ToList())
+            {
+                BoxViewModel? box = null;
+                try { box = _vm.Boxes.FirstOrDefault(b => b.Id == id); } catch { }
+                Services.LogService.Info("DesktopHost.Windows",
+                    $"{source}: id={id} header={Services.LogService.Truncate(box?.Header)} {window.Describe()}");
+            }
+        }
+        catch { }
     }
 
     private void EnsureBoxWindow(BoxViewModel box)
@@ -361,12 +387,18 @@ public partial class MainWindow : Window
 
         var host = GetDesktopHost();
         if (host == IntPtr.Zero)
+        {
+            Services.LogService.Warn("DesktopHost.Ensure",
+                $"host=0 未建窗 header={Services.LogService.Truncate(box.Header)}");
             return;
+        }
 
         try
         {
             var window = new BoxWindow(box, _vm, host);
             _boxWindows[box.Id] = window;
+            Services.LogService.Info("DesktopHost.Ensure",
+                $"已建窗 header={Services.LogService.Truncate(box.Header)} host=0x{host:X} {window.Describe()}");
         }
         catch (Exception ex)
         {

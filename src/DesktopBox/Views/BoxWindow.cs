@@ -61,6 +61,22 @@ public sealed class BoxWindow : IDisposable
     public bool IsHandleAlive => !_disposed && !_source.IsDisposed && Native.User32.IsWindow(_handle);
     private DateTime _lastMoveResizeUtc;
 
+    /// <summary>诊断快照：HWND/可见性/实际矩形/父窗口/模型坐标，用于定位"盒子不可见"。</summary>
+    public string Describe()
+    {
+        try
+        {
+            var alive = IsHandleAlive;
+            var visible = alive && Native.User32.IsWindowVisible(_handle);
+            var rect = Native.User32.GetWindowRect(_handle, out var r)
+                ? $"{r.Left},{r.Top},{r.Right - r.Left}x{r.Bottom - r.Top}" : "n/a";
+            var parent = alive ? Native.User32.GetParent(_handle) : IntPtr.Zero;
+            return $"hwnd=0x{_handle:X} alive={alive} visible={visible} rect=[{rect}] " +
+                   $"parent=0x{parent:X} model=({Box.X},{Box.Y},{Box.Width}x{Box.Height})";
+        }
+        catch { return "describe-failed"; }
+    }
+
     public void EnsureVisibleOnDesktopHost(IntPtr parent)
     {
         if (_disposed || _source.IsDisposed || parent == IntPtr.Zero)

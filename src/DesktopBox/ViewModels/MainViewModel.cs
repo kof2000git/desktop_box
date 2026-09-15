@@ -365,6 +365,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
         // 切到第一个有新文件的标签;无新增时保持首个标签。避免新增文件在其它标签而用户以为"没回来"。
         box.SelectedTab = firstChangedTab ?? box.Tabs.FirstOrDefault();
         Save();
+        Services.LogService.Info("Organize.Done",
+            $"new={newEntries.Count} boxes={Boxes.Count} organizeBox={box.Id} tabs={box.Tabs.Count}");
         if (allItems.Count > 0) ExtractIconsInBackground(allItems);
 
         // 整理后隐藏桌面图标:盒子已收纳这些图标,桌面再显示就重复了。告知用户如何还原显示。
