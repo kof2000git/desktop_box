@@ -28,4 +28,7 @@ public partial class SettingsWindow : Window
         }
         base.OnClosing(e);
     }
+
+    private void OnOpenLogDir(object sender, RoutedEventArgs e) =>
+        Services.LogService.OpenLogDirectory();
 }

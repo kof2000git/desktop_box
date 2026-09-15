@@ -19,6 +19,7 @@ public static class User32
     public const int WS_EX_LAYERED = 0x00080000;
     public const uint LWA_ALPHA = 0x00000002;
     public const uint SMTO_NORMAL = 0x0000;
+    public const uint SMTO_ABORTIFHUNG = 0x0002;
     public const uint WM_COMMAND = 0x0111;
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -78,6 +79,10 @@ public static class User32
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
+    /// <summary>x64 正确的指针宽度版本（GetWindowLong 在 x64 下会截断指针型索引）。新代码用这个。</summary>
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
@@ -104,6 +109,10 @@ public static class User32
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_FRAMECHANGED = 0x0020;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    /// <summary>异步排队，不等 explorer 重排完成。跨进程 SetWindowPos 必备，否则 explorer 忙则 UI 卡死。</summary>
+    public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+    /// <summary>跨进程 SetWindowPos 标准标志：不抢焦点 + 异步。</summary>
+    public const uint SWP_CROSSPROC = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS;
     public const int GWL_STYLE = -16;
     public const int WS_CHILD = 0x40000000;
     public const int WS_POPUP = unchecked((int)0x80000000);
@@ -139,27 +148,46 @@ public static class User32
 
     public static IntPtr GetWorkerW()
     {
+        // 缓存：0x052C 会让 Progman 新建 WorkerW，高频调用=狂建壁纸层窗口=桌面闪。
+        // 缓存有效（IsWindow）直接返回；失效才重新 spawn，且 spawn 消息只发一次。
+        if (_cachedWorkerW != IntPtr.Zero && IsWindow(_cachedWorkerW))
+            return _cachedWorkerW;
         var progman = GetProgman();
         if (progman == IntPtr.Zero) return IntPtr.Zero;
+        SendMessageTimeout(progman, WM_SPAWN_WORKERW, IntPtr.Zero, IntPtr.Zero, SMTO_NORMAL, 1000, out _);
         // 0x052C 让 Progman 创建 WorkerW,但创建有延迟,需重试几次 EnumWindows 才能找到
         for (int attempt = 0; attempt < 5; attempt++)
         {
-            SendMessageTimeout(progman, WM_SPAWN_WORKERW, IntPtr.Zero, IntPtr.Zero, SMTO_NORMAL, 1000, out _);
-            IntPtr workerW = IntPtr.Zero;
-            EnumWindows((topHwnd, _) =>
+            var workerW = FindWorkerWForDefView();
+            if (workerW != IntPtr.Zero)
             {
-                var shellDefView = FindWindowEx(topHwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
-                if (shellDefView != IntPtr.Zero)
-                {
-                    workerW = FindWindowEx(IntPtr.Zero, topHwnd, "WorkerW", null);
-                    return false;
-                }
-                return true;
-            }, IntPtr.Zero);
-            if (workerW != IntPtr.Zero) return workerW;
+                _cachedWorkerW = workerW;
+                return workerW;
+            }
             System.Threading.Thread.Sleep(60);
         }
         return IntPtr.Zero;
+    }
+
+    private static IntPtr _cachedWorkerW = IntPtr.Zero;
+
+    /// <summary>explorer 重启后缓存失效，下次 GetWorkerW 会重新 spawn。TaskbarCreated 时调用。</summary>
+    public static void InvalidateWorkerWCache() => _cachedWorkerW = IntPtr.Zero;
+
+    private static IntPtr FindWorkerWForDefView()
+    {
+        IntPtr workerW = IntPtr.Zero;
+        EnumWindows((topHwnd, _) =>
+        {
+            var shellDefView = FindWindowEx(topHwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
+            if (shellDefView != IntPtr.Zero)
+            {
+                workerW = FindWindowEx(IntPtr.Zero, topHwnd, "WorkerW", null);
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return workerW;
     }
 
     /// <summary>定位桌面图标视图窗口 SHELLDLL_DefView(用于控制桌面图标显隐)。</summary>

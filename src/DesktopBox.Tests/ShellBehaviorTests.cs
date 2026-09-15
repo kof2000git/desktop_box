@@ -82,7 +82,8 @@ public class ShellBehaviorTests
         source.Should().Contain("GetParent");
         source.Should().Contain("SetParent");
         source.Should().Contain("HWND_TOP");
-        source.Should().Contain("SWP_SHOWWINDOW");
+        // 跨进程 SetWindowPos 必须异步（SWP_CROSSPROC = SHOWWINDOW + ASYNC），否则 explorer 忙则卡死。
+        source.Should().Contain("SWP_CROSSPROC");
     }
 
     [Fact]
@@ -127,8 +128,10 @@ public class ShellBehaviorTests
 
         source.Should().Contain("FindShellDefView");
         source.Should().Contain("GetProgman");
-        source.IndexOf("FindShellDefView", StringComparison.Ordinal)
-            .Should().BeLessThan(source.IndexOf("GetProgman", StringComparison.Ordinal));
+        // 稳定优先：Progman 和图标同级、不抢 DefView 绘制，所以优先 Progman；
+        // DefView 只在 Progman 拿不到时用（来回切父是桌面抖动主因）。
+        source.IndexOf("GetProgman", StringComparison.Ordinal)
+            .Should().BeLessThan(source.IndexOf("FindShellDefView", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -526,7 +529,8 @@ public class ShellBehaviorTests
         job.Should().Contain("JobObjectLimitKillOnJobClose | JobObjectLimitSilentBreakawayOk");
         runner.Should().Contain("isolated = _job.TryAssign(process);");
         runner.Should().Contain("if (!isolated)");
-        runner.Should().Contain("ShellMenuRunStatus.IsolationUnavailable");
+        // 宿主已在 Job 中（VS 调试/沙箱）时降级为无 Job 运行，只记日志，不再整单失败。
+        runner.Should().Contain("降级运行");
     }
 
     [Fact]

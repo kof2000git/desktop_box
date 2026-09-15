@@ -61,7 +61,10 @@ public class OrganizeService : IOrganizeService
     {
         var dir = Path.GetDirectoryName(_manifestPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        File.WriteAllText(_manifestPath, JsonSerializer.Serialize(m, _opts));
+        // 原子落盘：直接 WriteAllText 半截断电下次会被当“没整理过”静默丢。走 tmp+Move。
+        var tmp = _manifestPath + ".tmp";
+        File.WriteAllText(tmp, JsonSerializer.Serialize(m, _opts));
+        File.Move(tmp, _manifestPath, overwrite: true);
     }
 
     private OrganizeManifest? LoadManifest()

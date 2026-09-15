@@ -70,7 +70,7 @@ public static class Shell32
     public const uint SHCNRF_NewDelivery = 0x8000;       // 接收指针形式的 PIDL 列表(必须配合此标志)
 
     /// <summary>注册一个窗口接收 shell 变化通知。成功返回注册 ID(>0),失败返回 0。</summary>
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern uint SHChangeNotifyRegister(
         IntPtr hwnd,            // 接收通知消息的窗口
         uint fSources,          // SHCNRF_*
@@ -92,15 +92,17 @@ public static class Shell32
         public bool fRecursive;
     }
 
-    /// <summary>解析通知携带的 PIDL 列表(NewDelivery 模式:WPARAM=数量,LPARAM=PIDL 数组指针)。</summary>
+    /// <summary>解析通知携带的 PIDL 列表(NewDelivery 模式:WPARAM=数量,LPARAM=PIDL 数组指针)。
+    /// 原生签名 (HANDLE,DWORD,PIDLIST**,LONG*)，必须用 IntPtr/int，勿用 uint（x64 截断即 AV）。当前无调用，仅备查。</summary>
     [DllImport("shell32.dll")]
     public static extern IntPtr SHChangeNotification_Lock(IntPtr hChange, uint dwProcId,
-        out uint ppnl, out uint ppsne);
+        out IntPtr ppidl, out int pcevent);
     [DllImport("shell32.dll")]
     public static extern bool SHChangeNotification_Unlock(IntPtr hLock);
 }
 
-/// <summary>系统图像列表 COM 接口(IImageList)。只声明到 GetIcon(vtable 前6个方法占位以对齐槽位)。
+/// <summary>系统图像列表 COM 接口(IImageList)。只声明到 GetIcon。
+/// 注意 vtable 顺序：GetIcon 前还有 Remove/Copy 两个槽，已补齐占位，勿删。
 /// 必须在 STA 线程调用(见 IconExtractorService.ExtractSystemIcon)。</summary>
 [ComImport, Guid("46EB5926-582E-4017-9FDF-E899822AA095"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public interface IImageList
@@ -111,6 +113,8 @@ public interface IImageList
     void Replace(int i, IntPtr hbmImage, IntPtr hbmMask);
     void AddMasked(IntPtr hbmImage, uint crMask, out int pi);
     void Draw(IntPtr pimldp);
+    void Remove(int i);
+    void Copy(int i, IntPtr punkSrc, int iSrc, uint uFlags);
     // PreserveSig:直接拿 HRESULT,失败(如 iIcon 越界)不抛 COM 异常,便于记录真实 hr
     [PreserveSig]
     int GetIcon(int i, uint flags, out IntPtr picon);

@@ -59,7 +59,17 @@ public sealed class ShellMenuProcessRunner : IShellMenuRunner
             lock (_processGate)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                process = Process.Start(startInfo);
+                try
+                {
+                    process = Process.Start(startInfo);
+                }
+                catch (Exception ex) when (ex is Win32Exception or FileNotFoundException or DirectoryNotFoundException)
+                {
+                    // helper 缺失（没跑 build_dll.bat / publish 未拷贝）：回 StartFailed 走回退菜单，别弹错。
+                    LogService.Warn("ShellMenu.MissingHelper",
+                        $"helper 启动失败，回退到精简菜单 path={LogService.Truncate(_helperPath)} err={ex.Message}");
+                    return new(ShellMenuRunStatus.StartFailed);
+                }
                 if (process is null)
                     return new(ShellMenuRunStatus.StartFailed);
                 _activeProcesses.Add(process);
@@ -68,11 +78,10 @@ public sealed class ShellMenuProcessRunner : IShellMenuRunner
 
             if (!isolated)
             {
-                App.LogError(
-                    new Win32Exception(Marshal.GetLastWin32Error(), "Could not assign Shell menu helper to its isolation job."),
-                    "ShellMenuProcessRunner.AssignJob");
-                await KillAndWaitAsync(process).ConfigureAwait(false);
-                return new(ShellMenuRunStatus.IsolationUnavailable);
+                // 宿主已在 Job 中（VS 调试/dotnet run/企业沙箱，单进程单 Job）时 Assign 恒失败。
+                // 旧逻辑直接判菜单不可用（100% 右键失败）；现降级为无 Job 运行（helper 本身已是独立进程），只记日志。
+                LogService.Warn("ShellMenu.NoJob",
+                    $"helper 未进隔离 Job（宿主可能已在 Job 中），降级运行 path={LogService.Truncate(path)}");
             }
 
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -145,8 +154,9 @@ public sealed class ShellMenuProcessRunner : IShellMenuRunner
         {
             try
             {
+                // 退出时别在调用线程（常为 UI）同步等 5s，缩到 500ms，避免关机卡死观感。
                 if (!process.HasExited) process.Kill(entireProcessTree: true);
-                process.WaitForExit(5000);
+                process.WaitForExit(500);
             }
             catch { }
         }

@@ -59,24 +59,38 @@ public sealed class BoxWindow : IDisposable
     public IntPtr Handle => _disposed || _source.IsDisposed ? IntPtr.Zero : _handle;
     public bool IsDisposed => _disposed;
     public bool IsHandleAlive => !_disposed && !_source.IsDisposed && Native.User32.IsWindow(_handle);
+    private DateTime _lastMoveResizeUtc;
 
     public void EnsureVisibleOnDesktopHost(IntPtr parent)
     {
         if (_disposed || _source.IsDisposed || parent == IntPtr.Zero)
             return;
+        if (!Native.User32.IsWindow(parent) || !Native.User32.IsWindow(_handle))
+            return;
 
-        if (Native.User32.GetParent(_handle) != parent)
-            Native.User32.SetParent(_handle, parent);
+        try
+        {
+            if (Native.User32.GetParent(_handle) != parent)
+            {
+                // 可见窗口跨进程换父先隐藏，避免撕裂/闪。失败只记日志，不抛。
+                Native.User32.ShowWindow(_handle, 0); // SW_HIDE
+                Native.User32.SetParent(_handle, parent);
+            }
 
-        var clientPosition = Native.User32.ScreenPointToClient(parent, Box.X, Box.Y);
-        Native.User32.SetWindowPos(
-            _handle,
-            Native.User32.HWND_TOP,
-            clientPosition.X,
-            clientPosition.Y,
-            Math.Max(1, (int)Math.Round(Box.Width)),
-            Math.Max(1, (int)Math.Round(Box.Height)),
-            Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
+            var clientPosition = Native.User32.ScreenPointToClient(parent, Box.X, Box.Y);
+            Native.User32.SetWindowPos(
+                _handle,
+                Native.User32.HWND_TOP,
+                clientPosition.X,
+                clientPosition.Y,
+                Math.Max(1, (int)Math.Round(Box.Width)),
+                Math.Max(1, (int)Math.Round(Box.Height)),
+                Native.User32.SWP_CROSSPROC);
+        }
+        catch (Exception ex)
+        {
+            Services.LogService.Error(ex, "BoxWindow.EnsureVisible");
+        }
     }
 
     public void CloseForRemoval() => Dispose();
@@ -96,6 +110,12 @@ public sealed class BoxWindow : IDisposable
     {
         if (_disposed || _source.IsDisposed)
             return;
+        // 节流：拖动/缩放每像素都会触发 PropertyChanged→跨进程 SetWindowPos，
+        // 高频强制 explorer 重排是卡顿/闪烁放大器。16ms 合并一帧。
+        var now = DateTime.UtcNow;
+        if ((now - _lastMoveResizeUtc).TotalMilliseconds < 16)
+            return;
+        _lastMoveResizeUtc = now;
 
         var scale = GetDpiScale();
         _content.Width = Math.Max(1, Box.Width / scale.X);
@@ -109,7 +129,7 @@ public sealed class BoxWindow : IDisposable
             clientPosition.Y,
             Math.Max(1, (int)Math.Round(Box.Width)),
             Math.Max(1, (int)Math.Round(Box.Height)),
-            Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
+            Native.User32.SWP_CROSSPROC);
     }
 
     private (double X, double Y) GetDpiScale()
@@ -126,6 +146,17 @@ public sealed class BoxWindow : IDisposable
             return;
 
         MarkDisposed();
+        try
+        {
+            // 先从 explorer 子链表摘掉再销毁：explorer 正枚举/绘制子窗口时直接销毁
+            // 会损坏子链表（桌面闪一下/图标重排的来源之一）。
+            if (Native.User32.IsWindow(_handle))
+            {
+                Native.User32.ShowWindow(_handle, 0); // SW_HIDE
+                Native.User32.SetParent(_handle, IntPtr.Zero);
+            }
+        }
+        catch { }
         _source.Disposed -= OnSourceDisposed;
         _source.RootVisual = null;
         _source.Dispose();

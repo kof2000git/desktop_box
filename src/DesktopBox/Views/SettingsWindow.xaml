@@ -49,6 +49,8 @@
         </StackPanel>
 
         <TextBlock Grid.Row="6" Text="{DynamicResource settings.note}"
-                   Foreground="#FF9AA0A6" FontSize="11"/>
+                   Foreground="#FF9AA0A6" FontSize="11" Margin="0,0,0,8"/>
+        <Button Grid.Row="6" HorizontalAlignment="Right" VerticalAlignment="Bottom" Padding="10,4"
+                Click="OnOpenLogDir" Content="{DynamicResource settings.openLog}" Margin="0,24,0,0"/>
     </Grid>
 </Window>

@@ -17,6 +17,7 @@
     <s:String x:Key="menu.toggleIcons">Hide/Show Desktop Icons</s:String>
     <s:String x:Key="menu.refreshItems">Refresh Missing Icons</s:String>
     <s:String x:Key="menu.settings">Settings</s:String>
+    <s:String x:Key="menu.openLog">Open Log Folder</s:String>
     <s:String x:Key="menu.quit">Quit</s:String>
     <s:String x:Key="menu.view">View</s:String>
 
@@ -52,6 +53,7 @@
     <s:String x:Key="lang.zh-CN">简体中文</s:String>
     <s:String x:Key="lang.en-US">English</s:String>
     <s:String x:Key="settings.note">Changes apply instantly and save automatically.</s:String>
+    <s:String x:Key="settings.openLog">Open Log Folder</s:String>
 
     <s:String x:Key="theme.dark">Dark</s:String>
     <s:String x:Key="theme.light">Light</s:String>

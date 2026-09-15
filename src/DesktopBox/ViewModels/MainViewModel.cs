@@ -789,17 +789,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 var disp = Application.Current?.Dispatcher;
                 if (disp is null)
                 {
-                    Save();
+                    try { Save(); }
+                    catch (Exception ex) { ReportPersistenceFailure(ex); }
                     return;
                 }
                 if (disp.HasShutdownStarted) return;
                 disp.BeginInvoke(new Action(() =>
                 {
                     try { Save(); }
-                    catch { /* 落盘失败不崩 */ }
+                    catch (Exception ex) { ReportPersistenceFailure(ex); }
                 }));
             }
-            catch { /* 落盘失败不崩 */ }
+            catch (Exception ex) { ReportPersistenceFailure(ex); }
         }, null, 300, Timeout.Infinite);
         Interlocked.Exchange(ref _debounce, timer)?.Dispose();
         if (_disposed && ReferenceEquals(
@@ -851,6 +852,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private void ReportPersistenceFailure(Exception exception)
     {
+        try
+        {
+            Services.LogService.Error(exception, "MainViewModel.Save",
+                $"boxes={Boxes.Count} path={Services.LogService.Truncate(_store?.ToString(), 120)}");
+        }
+        catch { }
         App.LogError(exception, "MainViewModel.Save");
         PersistenceFailed?.Invoke(this, exception);
     }

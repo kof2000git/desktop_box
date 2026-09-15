@@ -32,6 +32,7 @@ public partial class App : Application
         // 关键:托盘常驻应用必须用 OnExplicitShutdown。
         // 否则任何对话框/窗口关闭都可能被 WPF 当成"最后一个窗口关闭"而退出程序。
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        global::DesktopBox.Services.LogService.WriteStartMarker();
 
         // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先);同时落盘日志便于事后排查
         DispatcherUnhandledException += (_, args) =>
@@ -53,13 +54,27 @@ public partial class App : Application
             // 后台线程/致命异常(如 0xc0000005 访问违规)会到这里,记录以便事后排查
             LogError(args.ExceptionObject as Exception, "AppDomain.UnhandledException");
         };
-
-        // 单实例:防止多开导致配置打架
-        _mutex = new Mutex(true, @"Global\DesktopBox_SingleInstance", out var createdNew);
-        if (!createdNew)
+        TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            Shutdown();
-            return;
+            LogError(args.Exception, "TaskScheduler.UnobservedTaskException");
+            args.SetObserved();
+        };
+
+        // 单实例:防止多开导致配置打架。Local\ 无需特权,受限账户/多会话也可用。
+        // 若连 Local\ 都建失败则记录后继续运行(宁可多开,不启动即崩)。
+        try
+        {
+            _mutex = new Mutex(true, @"Local\DesktopBox_SingleInstance", out var createdNew);
+            if (!createdNew)
+            {
+                Shutdown();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError(ex, "App.SingleInstance");
+            _mutex = null;
         }
 
         Services = ConfigureServices();
@@ -141,6 +156,7 @@ public partial class App : Application
     public static void LogError(Exception? ex, string source)
     {
         if (ex is null) return;
+        try { global::DesktopBox.Services.LogService.Error(ex, source); } catch { }
         try
         {
             var path = Models.AppPaths.LogPath;
@@ -206,7 +222,9 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         (Services as IDisposable)?.Dispose();
+        try { _mutex?.ReleaseMutex(); } catch { }
         _mutex?.Dispose();
+        _mutex = null;
         base.OnExit(e);
     }
 }

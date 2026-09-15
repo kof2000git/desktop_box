@@ -16,6 +16,7 @@ public class ShellChangeNotifierService : IShellChangeNotifierService, IDisposab
 {
     private const string RecycleBinClsid = "::{645FF040-5081-101B-9F08-00AA002F954E}";
     private readonly List<uint> _notifyIds = new();
+    private readonly object _idsGate = new();
     private readonly object _timerGate = new();
     private bool _globalRegistered;
     private bool _recycleBinRegistered;
@@ -83,7 +84,7 @@ public class ShellChangeNotifierService : IShellChangeNotifierService, IDisposab
         var id = Shell32.SHChangeNotifyRegister(hwnd, sources, events, NotifyMessageId, 1, ref entry);
         if (id != 0)
         {
-            _notifyIds.Add(id);
+            lock (_idsGate) _notifyIds.Add(id);
             return true;
         }
 
@@ -181,18 +182,25 @@ public class ShellChangeNotifierService : IShellChangeNotifierService, IDisposab
 
     private void DeregisterAll()
     {
-        foreach (var id in _notifyIds)
+        List<uint> ids;
+        lock (_idsGate)
+        {
+            ids = _notifyIds.ToList();
+            _notifyIds.Clear();
+        }
+        foreach (var id in ids)
         {
             try { Shell32.SHChangeNotifyDeregister(id); } catch { }
         }
-        _notifyIds.Clear();
         _globalRegistered = false;
         _recycleBinRegistered = false;
     }
 
+    // 注意：终结器里调 SHChangeNotifyDeregister 会和 UI 线程抢 _notifyIds，
+    // 且此时 hwnd 可能已死（explorer 会继续向死 hwnd 发通知=卡顿源）。
+    // 只释放 Timer，Deregister 只在 Dispose（UI/退出路径）做。
     ~ShellChangeNotifierService()
     {
-        DeregisterAll();
-        _iconThrottle?.Dispose();
+        try { _iconThrottle?.Dispose(); } catch { }
     }
 }

@@ -224,15 +224,43 @@ public partial class BoxControl : UserControl
             return;
         }
 
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        try
         {
-            var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            foreach (var p in paths) MainVm.AddItemToBox(Vm, p);
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                // Outlook/浏览器等虚拟拖放源 GetData(FileDrop) 可能不是 string[]，
+                // 裸强转会在 UI 线程直接崩。先 is 校验 + 限批 500（防池饥饿/数千Timer）。
+                if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths)
+                {
+                    Services.LogService.Warn("Drop.Ignored",
+                        $"FileDrop 格式不符，formats=[{string.Join(",", e.Data.GetFormats())}]");
+                    e.Handled = true;
+                    return;
+                }
+                const int MaxBatch = 500;
+                if (paths.Length > MaxBatch)
+                {
+                    Services.LogService.Warn("Drop.Truncated", $"批量 {paths.Length} > {MaxBatch}，只导入前 {MaxBatch}");
+                    InputDialog.Inform($"一次最多导入 {MaxBatch} 个文件，本次只导入前 {MaxBatch} 个（共 {paths.Length} 个）。");
+                    paths = paths.Take(MaxBatch).ToArray();
+                }
+                foreach (var p in paths)
+                {
+                    if (string.IsNullOrWhiteSpace(p)) continue;
+                    MainVm.AddItemToBox(Vm, p);
+                }
+            }
+            else if (e.Data.GetDataPresent(DataFormats.Text))
+            {
+                // 大文本粘贴（10MB 日志）会在 UI 线程复制大字符串，先限长。
+                var raw = e.Data.GetData(DataFormats.Text) as string;
+                var txt = raw is not null && raw.Length > 2048 ? raw[..2048] : raw;
+                if (!string.IsNullOrWhiteSpace(txt)) MainVm.AddItemToBox(Vm, txt.Trim());
+            }
         }
-        else if (e.Data.GetDataPresent(DataFormats.Text))
+        catch (Exception ex)
         {
-            var txt = (string)e.Data.GetData(DataFormats.Text);
-            if (!string.IsNullOrWhiteSpace(txt)) MainVm.AddItemToBox(Vm, txt.Trim());
+            App.LogError(ex, "BoxControl.OnDrop");
         }
         e.Handled = true;
     }

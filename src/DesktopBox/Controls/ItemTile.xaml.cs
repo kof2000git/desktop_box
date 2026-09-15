@@ -264,6 +264,7 @@ public partial class ItemTile : UserControl
         }
         catch (Exception ex)
         {
+            App.LogError(ex, "ItemTile.OpenItem");
             MessageBox.Show(string.Format(Localizer["dialog.openFail"], ex.Message),
                 Localizer["app.errorTitle"], MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -309,6 +310,7 @@ public partial class ItemTile : UserControl
                     switch (helperResult.Status)
                     {
                         case ShellMenuRunStatus.StartFailed:
+                        case ShellMenuRunStatus.IsolationUnavailable:
                             fallback = true;
                             break;
                         case ShellMenuRunStatus.RemoveFromBox:
@@ -317,10 +319,10 @@ public partial class ItemTile : UserControl
                         case ShellMenuRunStatus.TargetDeleted:
                             await RefreshAfterDeleteAsync(item);
                             return;
-                        case ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut or ShellMenuRunStatus.IsolationUnavailable:
+                        case ShellMenuRunStatus.Crashed or ShellMenuRunStatus.TimedOut:
                             App.LogError(
                                 new InvalidOperationException(
-                                    $"Shell menu helper {helperResult.Status}; exitCode={helperResult.ExitCode?.ToString() ?? "unknown"}"),
+                                    $"Shell menu helper {helperResult.Status}; exitCode={helperResult.ExitCode?.ToString() ?? "unknown"}; target={Services.LogService.Truncate(item.TargetPath)}"),
                                 "ItemTile.ShellMenuHelper");
                             // 目标可能在菜单期间被删掉:优先给可操作的回退菜单,而不是只弹错误。
                             if (IsLocalPathItem(item) && !TargetExists(item.TargetPath))

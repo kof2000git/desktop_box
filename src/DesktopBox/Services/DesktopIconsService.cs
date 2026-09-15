@@ -39,17 +39,23 @@ public class DesktopIconsService : IDesktopIconsService
         try
         {
             var def = User32.FindShellDefView();
-            if (def != IntPtr.Zero)
+            if (def != IntPtr.Zero && User32.IsWindow(def))
             {
-                // 0x7073 是"切换"命令:发一次翻转注册表 + 视图
-                User32.SendMessage(def, User32.WM_COMMAND, (IntPtr)TOGGLE_CMD, IntPtr.Zero);
+                // 0x7073 是"切换"命令。必须用带超时的 SendMessageTimeout 跨进程发送：
+                // explorer 卡顿时 SendMessage 会无限卡住 UI 线程（历史卡死主因）。
+                var ok = User32.SendMessageTimeout(def, User32.WM_COMMAND, (IntPtr)TOGGLE_CMD, IntPtr.Zero,
+                    User32.SMTO_ABORTIFHUNG, 2000, out _) != IntPtr.Zero;
+                if (!ok)
+                    LogService.Warn("DesktopIcons.Toggle", "SendMessageTimeout 超时/失败，已只写注册表兜底");
                 SetRegistry(visible ? 0 : 1);
+                LogService.Info("DesktopIcons.Toggle", $"targetVisible={visible} sendOk={ok}");
                 return;
             }
             // 兜底:只写注册表(下次 explorer 刷新后生效)
             SetRegistry(visible ? 0 : 1);
+            LogService.Info("DesktopIcons.Toggle", $"targetVisible={visible} viaRegistryOnly (defView=0)");
         }
-        catch { /* 不崩 */ }
+        catch (Exception ex) { LogService.Error(ex, "DesktopIcons.SetVisible"); }
     }
 
     private static void SetRegistry(int hideIcons)

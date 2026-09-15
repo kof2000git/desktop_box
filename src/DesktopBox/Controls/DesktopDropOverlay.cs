@@ -39,10 +39,11 @@ public sealed class DesktopDropOverlay : IDisposable
 
     public static DesktopDropOverlay? TryCreate(IEnumerable<Rect> excludedBounds)
     {
-        var parent = Native.User32.FindShellDefView();
-        if (parent == IntPtr.Zero)
-            parent = Native.User32.GetProgman();
-        if (parent == IntPtr.Zero)
+        // 与 MainWindow 同策略：优先 Progman（和图标同级，不抢 DefView 绘制），稳定优先。
+        var parent = Native.User32.GetProgman();
+        if (parent == IntPtr.Zero || !Native.User32.IsWindow(parent))
+            parent = Native.User32.FindShellDefView();
+        if (parent == IntPtr.Zero || !Native.User32.IsWindow(parent))
             return null;
 
         var bounds = GetVirtualDesktopBounds();
@@ -72,7 +73,7 @@ public sealed class DesktopDropOverlay : IDisposable
             parameters.PositionY,
             parameters.Width,
             parameters.Height,
-            Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
+            Native.User32.SWP_CROSSPROC);
 
         return new DesktopDropOverlay(source, bounds);
     }
@@ -208,6 +209,15 @@ public sealed class DesktopDropOverlay : IDisposable
             return;
 
         _disposed = true;
+        try
+        {
+            if (Native.User32.IsWindow(_source.Handle))
+            {
+                Native.User32.ShowWindow(_source.Handle, 0);
+                Native.User32.SetParent(_source.Handle, IntPtr.Zero);
+            }
+        }
+        catch { }
         _source.RootVisual = null;
         _source.Dispose();
     }

@@ -57,15 +57,23 @@ public class JsonStoreService : IPersistenceService
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    // bak 可读：读到配置先用，只是回写主文件失败才禁写，避免误伤。
                     _saveBlocked = true;
+                    App.LogError(ex, "JsonStore.RestoreBackup");
                 }
                 return config;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                _saveBlocked = true;
+                // ArchiveCorruptPrimary 失败（主文件被锁）但 bak 可读时：不断言 blocked，
+                // 先用 bak 顶着，下次 Save 成功再解禁。避免“明明 bak 可用却禁写”。
                 if (TryLoadBackupAfterPrimaryFailure(out var backup))
+                {
+                    _saveBlocked = false;
+                    App.LogError(ex, "JsonStore.LoadPrimaryLocked");
                     return backup;
+                }
+                _saveBlocked = true;
                 throw;
             }
         }
@@ -102,7 +110,8 @@ public class JsonStoreService : IPersistenceService
             }
             finally
             {
-                File.Delete(tmp);
+                // Delete 失败（杀软/索引锁住 .tmp）不能掩盖原保存异常。
+                try { File.Delete(tmp); } catch { }
             }
         }
     }
@@ -151,7 +160,7 @@ public class JsonStoreService : IPersistenceService
         }
         finally
         {
-            File.Delete(tmp);
+            try { File.Delete(tmp); } catch { }
         }
     }
 }

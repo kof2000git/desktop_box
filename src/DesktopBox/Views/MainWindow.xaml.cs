@@ -29,6 +29,9 @@ public partial class MainWindow : Window
     private bool _ownedResourcesDisposed;
     private Timer? _desktopHostRetry;
     private DateTime _lastPersistenceFailureNotificationUtc;
+    private DateTime _lastRefreshUtc;
+    private IntPtr _mainHwnd = IntPtr.Zero;
+    private System.Windows.Interop.HwndSourceHook? _hwndHook;
 
     public MainWindow(MainViewModel vm, SettingsViewModel settingsVm, SettingsWindow settings)
     {
@@ -71,15 +74,30 @@ public partial class MainWindow : Window
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             var src = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
             if (src is null) return;
+            _mainHwnd = hwnd;
             var notifier = App.Services.GetRequiredService<IShellChangeNotifierService>();
-            src.AddHook((IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            _hwndHook = (IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
             {
                 if ((uint)msg == _taskbarCreatedMessage)
                 {
+                    // explorer 重启：新 DefView 半初始化，此时立即 SetParent 会挂到将死窗口
+                    // （建完即毁→循环闪）。失效缓存 + 延迟 1.5s 等新桌面层建完再挂。
                     _desktopHost = IntPtr.Zero;
+                    Native.User32.InvalidateWorkerWCache();
+                    Services.LogService.Warn("DesktopHost.TaskbarCreated", "explorer 重启，延迟重挂桌面层");
                     try { notifier.Register(hwnd, force: true); } catch (Exception ex) { App.LogError(ex, "MainWindow.ReRegisterShellNotify"); }
                     RestoreTrayIcon();
-                    RefreshDesktopLayer();
+                    _ = Task.Delay(1500).ContinueWith(_ =>
+                    {
+                        try
+                        {
+                            Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                if (!_ownedResourcesDisposed) RefreshDesktopLayer();
+                            }));
+                        }
+                        catch { }
+                    }, TaskScheduler.Default);
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -92,7 +110,8 @@ public partial class MainWindow : Window
                 }
 
                 return IntPtr.Zero;
-            });
+            };
+            src.AddHook(_hwndHook);
             notifier.Register(hwnd);
         }
         catch (Exception ex) { App.LogError(ex, "MainWindow.ShellChangeNotify"); }
@@ -125,6 +144,7 @@ public partial class MainWindow : Window
         menu.Items.Add(_localizer["menu.refreshItems"], null, (_, _) => RefreshMissingItemsFromTray());
         menu.Items.Add(_localizer["menu.settings"], null, (_, _) => OnOpenSettings(null, null));
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(_localizer["menu.openLog"], null, (_, _) => Services.LogService.OpenLogDirectory());
         menu.Items.Add(_localizer["menu.quit"], null, (_, _) => OnQuit(null, null));
         _tray.ContextMenuStrip = menu;
         oldMenu?.Dispose();
@@ -157,7 +177,7 @@ public partial class MainWindow : Window
             {
                 if (_ownedResourcesDisposed) return;
                 RefreshDesktopLayer();
-                var hasHost = _desktopHost != IntPtr.Zero;
+                var hasHost = _desktopHost != IntPtr.Zero && Native.User32.IsWindow(_desktopHost);
                 var hasWindows = _boxWindows.Count > 0 || _vm.Boxes.Count == 0;
                 if ((hasHost && hasWindows) || attempts >= 30)
                 {
@@ -235,12 +255,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            // 显隐切换会重建 DefView：原来 0/120/450ms 三连刷会和 explorer 重建竞态导致闪烁。
+            // 改为立即一次 + 500ms 后防抖一次。
             RefreshDesktopLayer();
-            await Task.Delay(120);
+            await Task.Delay(500);
             if (Application.Current?.Dispatcher.HasShutdownStarted == true) return;
-            RefreshDesktopLayer();
-            await Task.Delay(450);
-            if (Application.Current?.Dispatcher.HasShutdownStarted == true) return;
+            if (_ownedResourcesDisposed) return;
             RefreshDesktopLayer();
         }
         catch (Exception ex)
@@ -273,19 +293,22 @@ public partial class MainWindow : Window
 
     private void RefreshDesktopLayer()
     {
-        _desktopHost = Native.User32.FindShellDefView();
-        if (_desktopHost == IntPtr.Zero)
-        {
-            _desktopHost = Native.User32.GetProgman();
-        }
-
-        if (_desktopHost == IntPtr.Zero)
-        {
-            _desktopHost = Native.User32.GetWorkerW();
-        }
-
-        if (_desktopHost == IntPtr.Zero)
+        // 防抖：重试风暴（2s×30）+ 图标切换连刷会狂调 GetWorkerW（0x052C 新建壁纸窗口）。
+        // 200ms 内重复调用直接合并。
+        var now = DateTime.UtcNow;
+        if ((now - _lastRefreshUtc).TotalMilliseconds < 200)
             return;
+        _lastRefreshUtc = now;
+
+        var prev = _desktopHost;
+        _desktopHost = ResolveDesktopHost();
+        if (_desktopHost == IntPtr.Zero)
+        {
+            Services.LogService.Warn("DesktopHost.Resolve", "桌面宿主未就绪（explorer 可能正在启动），等待重试");
+            return;
+        }
+        if (prev != _desktopHost)
+            Services.LogService.Info("DesktopHost.Resolve", $"host 切换 0x{prev:X} -> 0x{_desktopHost:X} boxes={_vm.Boxes.Count}");
 
         SyncBoxWindows();
     }
@@ -353,15 +376,28 @@ public partial class MainWindow : Window
 
     private IntPtr GetDesktopHost(bool refresh = false)
     {
-        if (!refresh && _desktopHost != IntPtr.Zero)
+        if (!refresh && _desktopHost != IntPtr.Zero && Native.User32.IsWindow(_desktopHost))
             return _desktopHost;
 
-        _desktopHost = Native.User32.FindShellDefView();
-        if (_desktopHost == IntPtr.Zero)
-            _desktopHost = Native.User32.GetProgman();
-        if (_desktopHost == IntPtr.Zero)
-            _desktopHost = Native.User32.GetWorkerW();
+        _desktopHost = ResolveDesktopHost();
         return _desktopHost;
+    }
+
+    /// <summary>
+    /// 单一 host 策略：永远优先 Progman（和图标同级，不抢 DefView 绘制，最稳定）。
+    /// DefView 只在 Progman 拿不到时用；WorkerW（带缓存，只 spawn 一次）最后兜底。
+    /// 来回切父是桌面抖动的主因，所以顺序固定、不翻转。
+    /// </summary>
+    private static IntPtr ResolveDesktopHost()
+    {
+        var progman = Native.User32.GetProgman();
+        if (progman != IntPtr.Zero && Native.User32.IsWindow(progman))
+            return progman;
+        var def = Native.User32.FindShellDefView();
+        if (def != IntPtr.Zero && Native.User32.IsWindow(def))
+            return def;
+        var worker = Native.User32.GetWorkerW();
+        return Native.User32.IsWindow(worker) ? worker : IntPtr.Zero;
     }
 
     private void RestoreTrayIcon()
@@ -394,6 +430,18 @@ public partial class MainWindow : Window
 
         _ownedResourcesDisposed = true;
         Interlocked.Exchange(ref _desktopHostRetry, null)?.Dispose();
+        // 移除 HwndSource hook：否则 explorer 的 shellNotify 会打到半析构窗口。
+        try
+        {
+            if (_mainHwnd != IntPtr.Zero && _hwndHook is not null)
+            {
+                var src = System.Windows.Interop.HwndSource.FromHwnd(_mainHwnd);
+                src?.RemoveHook(_hwndHook);
+            }
+        }
+        catch { }
+        _hwndHook = null;
+        _mainHwnd = IntPtr.Zero;
         _vm.Boxes.CollectionChanged -= OnBoxesChanged;
         _vm.PropertyChanged -= OnViewModelPropertyChanged;
         _vm.PersistenceFailed -= OnPersistenceFailed;
