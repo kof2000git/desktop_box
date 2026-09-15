@@ -19,9 +19,6 @@ public partial class BoxControl : UserControl
     private Point _boxOrigin;            // 拖动起始时盒子位置:用"起点+累积位移"算意图位置,不受磁吸覆盖
     private bool _isDragging;
     private bool _isResizing;
-    private Rect _resizeBoxOrigin;
-    private double _resizeDx;
-    private double _resizeDy;
     private readonly BoxEdgeSnapState _snapX = new();
     private readonly BoxEdgeSnapState _snapY = new();
     private MainViewModel? _mainVm;
@@ -163,51 +160,94 @@ public partial class BoxControl : UserControl
     }
 
     // ---- 缩放 ----
+    // 实现：屏幕坐标锚定法。缩放中唯一的自由度是当前鼠标的屏幕位置；对角/对边锚点
+    // 在 DragStarted 时用屏幕坐标钉死，永不移动。尺寸=鼠标−锚点（按方向投影），每次
+    // DragDelta 独立计算、零累积。
+    // 历史：旧版用 DragDelta 的 e.HorizontalChange 逐次累加到 _resizeDx/_resizeDy。
+    // WPF Thumb 的 delta 相对 Thumb 自身，而 Thumb 钉在窗口边缘上——拖动时窗口一变大，
+    // Thumb 就追着鼠标跑，相对位移反向，形成正反馈振荡（窗口忽大忽小、日志里 dx 抖到
+    // ±9000）。改成鼠标绝对坐标后回路消失，鼠标指哪边在哪。
     private void OnResizeStarted(object sender, DragStartedEventArgs e)
     {
         if (Vm is null) return;
         _isResizing = true;
-        _resizeBoxOrigin = new Rect(Vm.X, Vm.Y, Vm.Width, Vm.Height);
-        _resizeDx = 0;
-        _resizeDy = 0;
         _resizeDir = (sender as FrameworkElement)?.Tag as string ?? "SE";
-        // 诊断（缩放抖动调查）：记录起点与方向。若拖动中再次出现 Start（capture 被打断重捕获），
-        // 会直接看到连续两条 Start。
+        _resizeOrigin = new Rect(Vm.X, Vm.Y, Vm.Width, Vm.Height);
+        _resizeAnchor = ComputeAnchor(_resizeOrigin, _resizeDir);
         Services.LogService.Info("BoxResize.Start",
-            $"dir={_resizeDir} origin=({_resizeBoxOrigin.X:0},{_resizeBoxOrigin.Y:0},{_resizeBoxOrigin.Width:0}x{_resizeBoxOrigin.Height:0})");
+            $"dir={_resizeDir} origin=({_resizeOrigin.X:0},{_resizeOrigin.Y:0},{_resizeOrigin.Width:0}x{_resizeOrigin.Height:0}) anchor=({_resizeAnchor.X:0},{_resizeAnchor.Y:0})");
     }
 
     private string _resizeDir = "SE";
+    private Rect _resizeOrigin;
+    private Point _resizeAnchor;
+
+    /// <summary>方向的对侧锚点（拖动中固定不动）：SE/W/S 用左上系，NW/E/N 用右下系。</summary>
+    private static Point ComputeAnchor(Rect r, string dir) => dir switch
+    {
+        "SE" => new Point(r.Left, r.Top),
+        "E" => new Point(r.Left, r.Top),
+        "S" => new Point(r.Left, r.Top),
+        "NW" => new Point(r.Right, r.Bottom),
+        "W" => new Point(r.Right, r.Bottom),
+        "N" => new Point(r.Right, r.Bottom),
+        "NE" => new Point(r.Left, r.Bottom),
+        "SW" => new Point(r.Right, r.Top),
+        _ => new Point(r.Left, r.Top)
+    };
 
     private void OnResize(object sender, DragDeltaEventArgs e)
     {
         if (!_isResizing || Vm is null) return;
         var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
-        if (dir != _resizeDir)
+        // 只信当前鼠标屏幕位置（PointToScreen 映射稳定，与 Thumb 无关），不信 delta。
+        var mouse = PointToScreen(Mouse.GetPosition(this));
+        double x = _resizeOrigin.X, y = _resizeOrigin.Y;
+        double w = _resizeOrigin.Width, h = _resizeOrigin.Height;
+
+        switch (dir)
         {
-            // 诊断（缩放抖动调查）：拖动中方向变了 = capture 在 Thumb 之间漂移，
-            // 累积位移配错方向会把盒子一把拽到最小尺寸（"忽大忽小"的头号嫌疑）。
-            Services.LogService.Warn("BoxResize.DirSwitch",
-                $"dir {_resizeDir} -> {dir} dx={_resizeDx:0} dy={_resizeDy:0}");
-            _resizeDir = dir;
+            case "SE":
+                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
+                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                break;
+            case "S":
+                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                break;
+            case "E":
+                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
+                break;
+            case "SW":
+                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
+                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                x = _resizeAnchor.X - w;
+                break;
+            case "W":
+                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
+                x = _resizeAnchor.X - w;
+                break;
+            case "NW":
+                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
+                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                x = _resizeAnchor.X - w;
+                y = _resizeAnchor.Y - h;
+                break;
+            case "N":
+                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                y = _resizeAnchor.Y - h;
+                break;
+            case "NE":
+                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
+                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                y = _resizeAnchor.Y - h;
+                break;
         }
-        var scale = GetDpiScale();
-        _resizeDx += e.HorizontalChange * scale.X;
-        _resizeDy += e.VerticalChange * scale.Y;
 
-        var resized = BoxResize.Apply(_resizeBoxOrigin, dir, _resizeDx, _resizeDy);
-        if (resized.Width < _lastLoggedW - 40 || resized.Height < _lastLoggedH - 40)
-            Services.LogService.Warn("BoxResize.Shrink",
-                $"dir={dir} dx={_resizeDx:0} dy={_resizeDy:0} -> {resized.Width:0}x{resized.Height:0}");
-        _lastLoggedW = resized.Width;
-        _lastLoggedH = resized.Height;
-        Vm.X = resized.X;
-        Vm.Y = resized.Y;
-        Vm.Width = resized.Width;
-        Vm.Height = resized.Height;
+        Vm.X = x;
+        Vm.Y = y;
+        Vm.Width = w;
+        Vm.Height = h;
     }
-
-    private double _lastLoggedW, _lastLoggedH;
 
     private void OnResizeCompleted(object sender, DragCompletedEventArgs e)
     {

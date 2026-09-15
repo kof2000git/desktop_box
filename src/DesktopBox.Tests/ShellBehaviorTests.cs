@@ -225,13 +225,13 @@ public class ShellBehaviorTests
         xaml.Should().Contain("DragStarted=\"OnResizeStarted\"");
         xaml.Should().Contain("DragCompleted=\"OnResizeCompleted\"");
         code.Should().Contain("OnHeaderMove");
-        code.Should().Contain("_resizeBoxOrigin");
-        code.Should().Contain("e.HorizontalChange * scale.X");
-        code.Should().Contain("e.VerticalChange * scale.Y");
+        // 缩放用屏幕坐标锚定法（对角锚点+当前鼠标），零累积——旧版 DragDelta 累积量
+        // 会被 Thumb 自身的移动反噬，形成正反馈振荡（窗口忽大忽小）。
+        code.Should().Contain("_resizeAnchor");
+        code.Should().Contain("ComputeAnchor");
+        code.Should().Contain("Mouse.GetPosition(this)");
         code.Should().Contain("_isResizing = true");
         code.Should().Contain("if (!_isResizing || Vm is null) return");
-        code.Should().Contain("BoxResize.Apply");
-        code.Should().NotContain("PointToScreen(Mouse.GetPosition(this))");
         code.Should().Contain("OnResizeCompleted");
         code.Should().Contain("SystemParametersHelper.ClampIntoScreens");
         code.Should().Contain("NavigateByFirstLetter");
