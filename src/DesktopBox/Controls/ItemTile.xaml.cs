@@ -36,6 +36,12 @@ public partial class ItemTile : UserControl
     public ItemTile()
     {
         InitializeComponent();
+        // WPF-UI hover 动画打 frozen 主题画刷会致命崩溃（v1.7.10）：Loaded 后把实例画刷解冻。
+        // 盒子后续新增的磁贴走这里（BoxControl.Loaded 只覆盖首屏已建磁贴）。
+        Loaded += (_, _) =>
+        {
+            try { WpfUiAnimationGuard.UnfreezeSubtree(this); } catch { }
+        };
         DataContextChanged += (_, _) =>
         {
             SetFallback();

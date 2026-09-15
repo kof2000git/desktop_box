@@ -18,6 +18,11 @@ public partial class InputDialog : Window
         // 表现为"对话框看不见 + 盒子卡住"。
         Topmost = true;
         Input.Focus();
+        // WPF-UI hover 动画打 frozen 主题画刷会致命崩溃（v1.7.10）：Loaded 后把实例画刷解冻。
+        Loaded += (_, _) =>
+        {
+            try { Services.WpfUiAnimationGuard.UnfreezeSubtree(this); } catch { }
+        };
     }
 
     /// <summary>输入框:返回用户输入,取消返回 null。</summary>

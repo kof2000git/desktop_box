@@ -33,12 +33,14 @@ public partial class App : Application
         // 否则任何对话框/窗口关闭都可能被 WPF 当成"最后一个窗口关闭"而退出程序。
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         global::DesktopBox.Services.LogService.WriteStartMarker();
+        global::DesktopBox.Services.WpfUiAnimationGuard.EnsureRegistered();
 
         // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先);同时落盘日志便于事后排查
         DispatcherUnhandledException += (_, args) =>
         {
             LogError(args.Exception, "DispatcherUnhandledException");
-            var canContinue = CanContinueAfterDispatcherException(args.Exception);
+            var canContinue = CanContinueAfterDispatcherException(args.Exception)
+                || IsBenignAnimationFailure(args.Exception);
             args.Handled = canContinue;
             try
             {
@@ -215,6 +217,16 @@ public partial class App : Application
         COMException or
         Win32Exception or
         OperationCanceledException;
+
+    /// <summary>
+    /// 良性动画失败兜底（纵深防御）：第三方样式（WPF-UI hover 动画）对 frozen 画刷跑
+    /// Storyboard 会抛 InvalidOperationException。动画播不出来不影响任何状态，
+    /// WPF 后续渲染照常，允许继续运行；其它 InvalidOperationException 仍按致命处理。
+    /// 根因修复见 ThemeBrushUnfreezer（这里只是防漏网）。
+    /// </summary>
+    internal static bool IsBenignAnimationFailure(Exception exception) =>
+        exception is InvalidOperationException
+        && exception.StackTrace?.Contains("System.Windows.Media.Animation") == true;
 
     internal static string GetDispatcherExceptionMessageKey(Exception exception) =>
         CanContinueAfterDispatcherException(exception) ? "dialog.unhandledError" : "dialog.fatalError";

@@ -41,6 +41,11 @@ public partial class BoxControl : UserControl
     public BoxControl()
     {
         InitializeComponent();
+        // WPF-UI hover 动画打 frozen 主题画刷会致命崩溃（v1.7.10）：Loaded 后把实例画刷解冻。
+        Loaded += (_, _) =>
+        {
+            try { WpfUiAnimationGuard.UnfreezeSubtree(this); } catch { }
+        };
         DataContextChanged += (_, _) =>
         {
             if (_subscribedVm is not null)

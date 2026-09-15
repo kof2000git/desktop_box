@@ -16,6 +16,8 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is SettingsViewModel vm)
             LightRadio.IsChecked = !vm.IsDark;
+        // WPF-UI hover 动画打 frozen 主题画刷会致命崩溃（v1.7.10）：Loaded 后把实例画刷解冻。
+        try { Services.WpfUiAnimationGuard.UnfreezeSubtree(this); } catch { }
     }
 
     protected override void OnClosing(CancelEventArgs e)
