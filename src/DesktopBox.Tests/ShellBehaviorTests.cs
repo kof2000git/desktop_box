@@ -82,8 +82,9 @@ public class ShellBehaviorTests
         source.Should().Contain("GetParent");
         source.Should().Contain("SetParent");
         source.Should().Contain("HWND_TOP");
-        // 跨进程 SetWindowPos 必须异步（SWP_CROSSPROC = SHOWWINDOW + ASYNC），否则 explorer 忙则卡死。
         source.Should().Contain("SWP_CROSSPROC");
+        // 逐帧只调矩形不重排 Z 序（每帧 HWND_TOP 会逼图标层重排=缩放闪烁主因）。
+        source.Should().Contain("SWP_NOZORDER");
     }
 
     [Fact]
