@@ -65,7 +65,7 @@ public sealed class BoxWindow : IDisposable
     private uint _pendingExtraFlags;
     private int _lastX = int.MinValue, _lastY = int.MinValue, _lastW, _lastH;
     private double _lastContentW, _lastContentH;
-    private DateTime _lastWriteLogUtc;
+    private DateTime _lastWriteLogUtc = DateTime.UtcNow;
 
     /// <summary>诊断快照：HWND/可见性/实际矩形/父窗口/模型坐标，用于定位"盒子不可见"。</summary>
     public string Describe()
@@ -130,9 +130,7 @@ public sealed class BoxWindow : IDisposable
 
     private void MoveResize(IntPtr insertAfter)
     {
-        // 逐帧路径（拖动/缩放 PropertyChanged）：不重排 Z 序。
-        // 每帧 HWND_TOP 会逼 DefView 下所有兄弟（含图标层）重排重绘，是闪烁主因；
-        // 置顶只在创建/修复时做一次（EnsureVisibleOnDesktopHost），之后保持即可。
+        // 逐帧路径（拖动/缩放 PropertyChanged）：不重排 Z 序（NOZORDER），只动自己的矩形。
         MoveResizeCore(insertAfter, Native.User32.SWP_NOZORDER, force: false);
     }
 
@@ -140,11 +138,10 @@ public sealed class BoxWindow : IDisposable
     {
         if (_disposed || _source.IsDisposed)
             return;
-        // 节流：拖动/缩放时输入可达上百 Hz，每次都跨进程 SetWindowPos + 全量重排，
-        // explorer 图标层跟着每帧重绘=抖动。33ms 合并一帧；尾帧用计时器防抖补齐
-        // （松手 33ms 后精确落位；持续拖动时计时器不断顺延，不会像 idle 补帧那样失效）。
+        // 节流：输入可达上百 Hz，16ms 合并到 60fps；尾帧用计时器防抖补齐
+        // （松手后精确落位；持续拖动时计时器不断顺延）。
         var now = DateTime.UtcNow;
-        if (!force && (now - _lastMoveResizeUtc).TotalMilliseconds < 33)
+        if (!force && (now - _lastMoveResizeUtc).TotalMilliseconds < 16)
         {
             _pendingInsertAfter = insertAfter;
             _pendingExtraFlags = extraFlags;
@@ -162,7 +159,7 @@ public sealed class BoxWindow : IDisposable
                     }
                     catch { }
                 }, null, Timeout.Infinite, Timeout.Infinite);
-                _resizeFlushTimer.Change(33, Timeout.Infinite);
+                _resizeFlushTimer.Change(16, Timeout.Infinite);
             }
             catch { }
             return;
@@ -191,7 +188,7 @@ public sealed class BoxWindow : IDisposable
         _lastY = clientPosition.Y;
         _lastW = w;
         _lastH = h;
-        // 诊断（缩放抖动调查）：记录每次真正的窗口写入，来源+矩形+距上次的间隔。
+        // 诊断（拖动抖动调查）：记录每次真正的窗口写入。
         var gap = (now - _lastWriteLogUtc).TotalMilliseconds;
         if (gap >= 15)
         {
@@ -199,6 +196,9 @@ public sealed class BoxWindow : IDisposable
             Services.LogService.Info("BoxWindow.Write",
                 $"hwnd=0x{_handle:X} rect=({clientPosition.X},{clientPosition.Y},{w}x{h}) dz={gap:0}ms noz={(extraFlags & Native.User32.SWP_NOZORDER) != 0}");
         }
+        // 交互拖动帧必须同步应用（无 ASYNCWINDOWPOS）：异步会把移动投递给 explorer
+        // 线程按它自己的节奏消化，时序不均 + DWM 对旧表面的拉伸 = 拖影/抖动。
+        // 已带 NOZORDER 不重排兄弟，同步是安全的；挂死风险由单独的 SendMessageTimeout 兜住。
         Native.User32.SetWindowPos(
             _handle,
             insertAfter,
@@ -206,7 +206,7 @@ public sealed class BoxWindow : IDisposable
             clientPosition.Y,
             w,
             h,
-            Native.User32.SWP_CROSSPROC | extraFlags);
+            Native.User32.SWP_NOACTIVATE | extraFlags);
     }
 
     private (double X, double Y) GetDpiScale()
