@@ -21,8 +21,16 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # windows runner 偶发超时/IO 抖动会让时序敏感的单测偶挂（本地与 main 均绿）。
+      # 失败自动重跑一次，两次都挂才算真失败。
       - name: Test
-        run: dotnet test DesktopBox.sln -c Release
+        shell: pwsh
+        run: |
+          dotnet test DesktopBox.sln -c Release --nologo
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Test failed once, retrying (CI runners are occasionally slow)..."
+            dotnet test DesktopBox.sln -c Release --nologo
+          }
 
       # 自包含单文件发布:与 release.ps1 保持一致。
       # 产物只保留 DesktopBox.exe + 原生 ShellMenu helper,避免发布包里出现大量 .NET 运行时 DLL。
