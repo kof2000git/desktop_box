@@ -122,8 +122,10 @@ public partial class BoxControl : UserControl
         double x = _boxOrigin.X + (pos.X - _dragOrigin.X);
         double y = _boxOrigin.Y + (pos.Y - _dragOrigin.Y);
         ApplyEdgeMagnet(Vm, ref x, ref y);
-        // 越界约束:保证标题栏区域留在某屏内,防止拖到屏外找不到
-        var (cx, cy) = SystemParametersHelper.ClampIntoScreens(x, y);
+        // 越界约束:保证盒子有足够可见区域留在屏内,防止拖出屏幕后只剩一条小边
+        // 被父窗口(DefView 只在屏幕内)裁掉 = "拖着拖着就不见了"。
+        var (cx, cy) = SystemParametersHelper.ClampIntoScreens(
+            x, y, Math.Min(Vm.Width, 320), Math.Min(Vm.Height, 120));
         Vm.X = cx;
         Vm.Y = cy;
     }
@@ -202,43 +204,44 @@ public partial class BoxControl : UserControl
         var dir = (sender as FrameworkElement)?.Tag as string ?? "SE";
         // 只信当前鼠标屏幕位置（PointToScreen 映射稳定，与 Thumb 无关），不信 delta。
         var mouse = PointToScreen(Mouse.GetPosition(this));
+        var bounds = SystemParametersHelper.VirtualBounds;
         double x = _resizeOrigin.X, y = _resizeOrigin.Y;
         double w = _resizeOrigin.Width, h = _resizeOrigin.Height;
 
         switch (dir)
         {
             case "SE":
-                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
-                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                w = ClampRange(mouse.X - _resizeAnchor.X, BoxResize.MinWidth, bounds.Right - x);
+                h = ClampRange(mouse.Y - _resizeAnchor.Y, BoxResize.MinHeight, bounds.Bottom - y);
                 break;
             case "S":
-                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                h = ClampRange(mouse.Y - _resizeAnchor.Y, BoxResize.MinHeight, bounds.Bottom - y);
                 break;
             case "E":
-                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
+                w = ClampRange(mouse.X - _resizeAnchor.X, BoxResize.MinWidth, bounds.Right - x);
                 break;
             case "SW":
-                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
-                h = Math.Max(BoxResize.MinHeight, mouse.Y - _resizeAnchor.Y);
+                w = ClampRange(_resizeAnchor.X - mouse.X, BoxResize.MinWidth, _resizeAnchor.X - bounds.Left);
+                h = ClampRange(mouse.Y - _resizeAnchor.Y, BoxResize.MinHeight, bounds.Bottom - y);
                 x = _resizeAnchor.X - w;
                 break;
             case "W":
-                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
+                w = ClampRange(_resizeAnchor.X - mouse.X, BoxResize.MinWidth, _resizeAnchor.X - bounds.Left);
                 x = _resizeAnchor.X - w;
                 break;
             case "NW":
-                w = Math.Max(BoxResize.MinWidth, _resizeAnchor.X - mouse.X);
-                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                w = ClampRange(_resizeAnchor.X - mouse.X, BoxResize.MinWidth, _resizeAnchor.X - bounds.Left);
+                h = ClampRange(_resizeAnchor.Y - mouse.Y, BoxResize.MinHeight, _resizeAnchor.Y - bounds.Top);
                 x = _resizeAnchor.X - w;
                 y = _resizeAnchor.Y - h;
                 break;
             case "N":
-                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                h = ClampRange(_resizeAnchor.Y - mouse.Y, BoxResize.MinHeight, _resizeAnchor.Y - bounds.Top);
                 y = _resizeAnchor.Y - h;
                 break;
             case "NE":
-                w = Math.Max(BoxResize.MinWidth, mouse.X - _resizeAnchor.X);
-                h = Math.Max(BoxResize.MinHeight, _resizeAnchor.Y - mouse.Y);
+                w = ClampRange(mouse.X - _resizeAnchor.X, BoxResize.MinWidth, bounds.Right - x);
+                h = ClampRange(_resizeAnchor.Y - mouse.Y, BoxResize.MinHeight, _resizeAnchor.Y - bounds.Top);
                 y = _resizeAnchor.Y - h;
                 break;
         }
@@ -247,6 +250,13 @@ public partial class BoxControl : UserControl
         Vm.Y = y;
         Vm.Width = w;
         Vm.Height = h;
+    }
+
+    /// <summary>把值夹在 [min,max] 内；max < min 时取 max（极小屏幕兜底）。</summary>
+    private static double ClampRange(double value, double min, double max)
+    {
+        if (max < min) max = min;
+        return Math.Clamp(value, min, max);
     }
 
     private void OnResizeCompleted(object sender, DragCompletedEventArgs e)

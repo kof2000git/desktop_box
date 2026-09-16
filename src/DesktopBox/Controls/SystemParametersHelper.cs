@@ -8,6 +8,21 @@ public static class SystemParametersHelper
 {
     public static IReadOnlyList<Rect> AllScreens => GetScreens();
 
+    /// <summary>所有屏幕拼接后的虚拟桌面边界(含多屏)。约束盒子永远完整在桌面内。</summary>
+    public static Rect VirtualBounds
+    {
+        get
+        {
+            var screens = AllScreens;
+            if (screens.Count == 0) return SystemParameters.WorkArea;
+            return new Rect(
+                screens.Min(s => s.Left),
+                screens.Min(s => s.Top),
+                screens.Max(s => s.Right) - screens.Min(s => s.Left),
+                screens.Max(s => s.Bottom) - screens.Min(s => s.Top));
+        }
+    }
+
     public static double LayoutWidth
     {
         get
