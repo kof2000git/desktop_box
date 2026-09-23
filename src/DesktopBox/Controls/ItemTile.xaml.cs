@@ -56,8 +56,13 @@ public partial class ItemTile : UserControl
     private void OnTileMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (Item is null) return;
+        if (e.ClickCount >= 2)
+        {
+            Item.IsSelected = true;
+            return;
+        }
         _dragStart = e.GetPosition(null);
-        _dragCandidate = e.ClickCount < 2 && ItemDragDrop.CanDragAsFile(Item);
+        _dragCandidate = ItemDragDrop.CanDragAsFile(Item);
         var vm = App.Services.GetRequiredService<ViewModels.MainViewModel>();
         vm.HandleTileClick(Item, Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
     }

@@ -88,6 +88,8 @@
                          AllowDrop="True"
                          PreviewMouseLeftButtonDown="OnTabListMouseDown"
                          PreviewMouseMove="OnTabListMouseMove"
+                         PreviewMouseRightButtonDown="OnTabListPreviewMouseRightButtonDown"
+                         PreviewMouseWheel="OnTabListPreviewMouseWheel"
                          DragOver="OnTabListDragOver"
                          Drop="OnTabListDrop"
                          ScrollViewer.HorizontalScrollBarVisibility="Hidden"
@@ -103,19 +105,79 @@
                             <Setter Property="Margin" Value="2,3"/>
                             <Setter Property="Foreground" Value="#FFCCCCCC"/>
                             <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="Cursor" Value="Hand"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
-                                        <Border x:Name="Bd" CornerRadius="6" Padding="{TemplateBinding Padding}" Background="Transparent">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
+                                        <Grid>
+                                            <!-- 选中背景 (Selected) -->
+                                            <Border x:Name="SelectedBd"
+                                                    CornerRadius="6"
+                                                    Background="#665599FF"
+                                                    BorderBrush="#995599FF"
+                                                    BorderThickness="1"
+                                                    Opacity="0"
+                                                    IsHitTestVisible="False"/>
+                                            <!-- 悬停背景 (Hover) -->
+                                            <Border x:Name="HoverBd"
+                                                    CornerRadius="6"
+                                                    Background="#26FFFFFF"
+                                                    BorderBrush="#33FFFFFF"
+                                                    BorderThickness="1"
+                                                    Opacity="0"
+                                                    IsHitTestVisible="False"/>
+                                            <!-- 内容呈现 -->
+                                            <Border x:Name="ContentBd"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}"
+                                                    Background="Transparent">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </Grid>
                                         <ControlTemplate.Triggers>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="#665599FF"/>
-                                                <Setter Property="Foreground" Value="White"/>
-                                            </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
+                                                <Setter TargetName="HoverBd" Property="Opacity" Value="1"/>
+                                                <Trigger.EnterActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="HoverBd"
+                                                                             Storyboard.TargetProperty="Opacity"
+                                                                             To="1.0" Duration="0:0:0.15"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.EnterActions>
+                                                <Trigger.ExitActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="HoverBd"
+                                                                             Storyboard.TargetProperty="Opacity"
+                                                                             To="0.0" Duration="0:0:0.15"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.ExitActions>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="SelectedBd" Property="Opacity" Value="1"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                                <Trigger.EnterActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="SelectedBd"
+                                                                             Storyboard.TargetProperty="Opacity"
+                                                                             To="1.0" Duration="0:0:0.15"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.EnterActions>
+                                                <Trigger.ExitActions>
+                                                    <BeginStoryboard>
+                                                        <Storyboard>
+                                                            <DoubleAnimation Storyboard.TargetName="SelectedBd"
+                                                                             Storyboard.TargetProperty="Opacity"
+                                                                             To="0.0" Duration="0:0:0.15"/>
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </Trigger.ExitActions>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>

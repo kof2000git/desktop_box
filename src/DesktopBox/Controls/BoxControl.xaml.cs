@@ -261,7 +261,7 @@ public partial class BoxControl : UserControl
 
     private void OnResizeCompleted(object sender, DragCompletedEventArgs e)
     {
-        if (!_isResizing) return;
+        if (!_isResizing || Vm is null) return;
         _isResizing = false;
         Services.LogService.Info("BoxResize.Done",
             $"dir={_resizeDir} final={Vm.Width:0}x{Vm.Height:0} at ({Vm.X:0},{Vm.Y:0})");
@@ -534,6 +534,26 @@ public partial class BoxControl : UserControl
         int newIdx = Vm.Tabs.IndexOf(target);
         if (oldIdx >= 0 && newIdx >= 0) Vm.Tabs.Move(oldIdx, newIdx);
         MainVm.ScheduleSave();
+    }
+
+    private void OnTabListPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        var scrollViewer = FindVisualChildren<ScrollViewer>(TabList).FirstOrDefault();
+        if (scrollViewer is null) return;
+        if (e.Delta < 0)
+            scrollViewer.LineRight();
+        else
+            scrollViewer.LineLeft();
+        e.Handled = true;
+    }
+
+    private void OnTabListPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var item = Ancestor<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (item?.DataContext is BoxTab tab && Vm is not null)
+        {
+            Vm.SelectedTab = tab;
+        }
     }
 
     /// <summary>沿可视树向上找指定类型的祖先。</summary>

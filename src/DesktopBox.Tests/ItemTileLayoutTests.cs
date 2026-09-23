@@ -103,6 +103,74 @@ public class ItemTileLayoutTests
         });
     }
 
+    [Fact]
+    public void SelectingTile_ActivatesSelectionBorderOpacity()
+    {
+        RunOnSta(() =>
+        {
+            var item = new BoxItem
+            {
+                DisplayName = "Test",
+                TargetPath = @"C:\Temp\Test.txt",
+                Type = ItemType.File
+            };
+            var tile = ArrangeTile(TileSize.Large, item);
+            var selectionBorder = (Border)tile.FindName("SelectionBorder");
+            selectionBorder.Should().NotBeNull();
+            selectionBorder.Opacity.Should().Be(0);
+
+            item.IsSelected = true;
+            Arrange(tile);
+            selectionBorder.Opacity.Should().Be(1);
+
+            item.IsSelected = false;
+            Arrange(tile);
+            selectionBorder.Opacity.Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public void TabSelection_ShowsSelectedBackground()
+    {
+        RunOnSta(() =>
+        {
+            var tab1 = new BoxTab { Name = "Tab1" };
+            var tab2 = new BoxTab { Name = "Tab2" };
+            var box = new BoxViewModel(new Box { Name = "TabBox", Width = 260, Height = 200 });
+            box.Tabs.Add(tab1);
+            box.Tabs.Add(tab2);
+            box.SelectedTab = tab1;
+
+            var control = new BoxControl { DataContext = box, Width = box.Width, Height = box.Height };
+            Arrange(control);
+
+            var tabList = (ListBox)control.FindName("TabList");
+            tabList.Should().NotBeNull();
+            tabList.UpdateLayout();
+
+            var item1 = (ListBoxItem)tabList.ItemContainerGenerator.ContainerFromIndex(0);
+            var item2 = (ListBoxItem)tabList.ItemContainerGenerator.ContainerFromIndex(1);
+            item1.Should().NotBeNull();
+            item2.Should().NotBeNull();
+            item1.ApplyTemplate();
+            item2.ApplyTemplate();
+            var selectedBd1 = (Border)item1.Template.FindName("SelectedBd", item1);
+            var selectedBd2 = (Border)item2.Template.FindName("SelectedBd", item2);
+            var hoverBd1 = (Border)item1.Template.FindName("HoverBd", item1);
+            selectedBd1.Should().NotBeNull();
+            selectedBd2.Should().NotBeNull();
+            hoverBd1.Should().NotBeNull();
+            selectedBd1.Opacity.Should().Be(1);
+            selectedBd2.Opacity.Should().Be(0);
+
+            // 切换到 tab2
+            box.SelectedTab = tab2;
+            tabList.UpdateLayout();
+            selectedBd1.Opacity.Should().Be(0);
+            selectedBd2.Opacity.Should().Be(1);
+        });
+    }
+
     private static ItemTile ArrangeTile(TileSize size, BoxItem item)
     {
         var tile = new ItemTile

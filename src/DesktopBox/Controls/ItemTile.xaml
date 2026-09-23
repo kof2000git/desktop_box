@@ -14,51 +14,114 @@
          不再靠固定 MaxWidth 截断——有空间就显示全名,真正放不下才 TextTrimming 省略。
          详细信息模式的修改时间/大小用固定列宽,保证每行对齐。
          Root 背景/边框绑定 IsSelected:选中时半透明蓝色高亮(资源管理器风格)。 -->
-    <Border x:Name="Root"
-            Padding="3"
-            CornerRadius="6">
-        <Border.Style>
-            <Style TargetType="Border">
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderBrush" Value="Transparent"/>
-                <Setter Property="BorderThickness" Value="1.5"/>
-                <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                        <Setter Property="Background" Value="#665599FF"/>
-                        <Setter Property="BorderBrush" Value="#CC88BBFF"/>
-                    </DataTrigger>
-                </Style.Triggers>
-            </Style>
-        </Border.Style>
-        <Grid x:Name="LayoutGrid">
-            <!-- 图标区 -->
-            <Grid x:Name="IconBox" Width="44" Height="44" HorizontalAlignment="Center">
-                <Border x:Name="Fallback" CornerRadius="10">
-                    <TextBlock x:Name="FallbackText"
-                               Foreground="White" FontSize="22" FontWeight="Bold"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <Image x:Name="Img" Width="40" Height="40"
-                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
-                       Source="{Binding IconCachePath}"/>
+    <Grid Cursor="Hand">
+        <!-- 选中动效层 (Selection):资源管理器风格半透明蓝+高亮边框,淡入淡出 -->
+        <Border x:Name="SelectionBorder"
+                CornerRadius="6"
+                Background="#665599FF"
+                BorderBrush="#CC88BBFF"
+                BorderThickness="1.5"
+                IsHitTestVisible="False">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="0"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                            <Setter Property="Opacity" Value="1"/>
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         To="1.0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         To="0.0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+
+        <!-- 悬停动效层 (Hover):柔和半透明浅白光晕,淡入淡出 -->
+        <Border x:Name="HoverBorder"
+                CornerRadius="6"
+                Background="#26FFFFFF"
+                BorderBrush="#33FFFFFF"
+                BorderThickness="1.5"
+                IsHitTestVisible="False">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Opacity" Value="0"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True">
+                            <Setter Property="Opacity" Value="1"/>
+                            <DataTrigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         To="1.0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.EnterActions>
+                            <DataTrigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                         To="0.0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </DataTrigger.ExitActions>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+        </Border>
+
+        <!-- 内容层:外边框和内边距恒定,避免选中时引起内部元素抖动/位移 -->
+        <Border x:Name="Root"
+                Padding="3"
+                CornerRadius="6"
+                Background="Transparent"
+                BorderBrush="Transparent"
+                BorderThickness="1.5">
+            <Grid x:Name="LayoutGrid">
+                <!-- 图标区 -->
+                <Grid x:Name="IconBox" Width="44" Height="44" HorizontalAlignment="Center">
+                    <Border x:Name="Fallback" CornerRadius="10">
+                        <TextBlock x:Name="FallbackText"
+                                   Foreground="White" FontSize="22" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Image x:Name="Img" Width="40" Height="40"
+                           Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                           Source="{Binding IconCachePath}"/>
+                </Grid>
+                <!-- 名称 -->
+                <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
+                           Foreground="#FFEEEEEE" FontSize="11"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="16"
+                           Padding="0,0,0,2"
+                           TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap" Margin="0,3,0,0"/>
+                <!-- 修改时间(详细信息/平铺可见) -->
+                <TextBlock x:Name="ModifiedText" Text="{Binding ModifiedText}"
+                           Foreground="#FF999999" FontSize="9"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                           Visibility="Collapsed"/>
+                <!-- 大小(详细信息/平铺可见) -->
+                <TextBlock x:Name="SizeText" Text="{Binding SizeText}"
+                           Foreground="#FF999999" FontSize="9"
+                           TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                           Visibility="Collapsed"/>
             </Grid>
-            <!-- 名称 -->
-            <TextBlock x:Name="NameText" Text="{Binding DisplayName}"
-                       Foreground="#FFEEEEEE" FontSize="11"
-                       LineStackingStrategy="BlockLineHeight" LineHeight="16"
-                       Padding="0,0,0,2"
-                       TextAlignment="Center" TextTrimming="CharacterEllipsis"
-                       TextWrapping="NoWrap" Margin="0,3,0,0"/>
-            <!-- 修改时间(详细信息/平铺可见) -->
-            <TextBlock x:Name="ModifiedText" Text="{Binding ModifiedText}"
-                       Foreground="#FF999999" FontSize="9"
-                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                       Visibility="Collapsed"/>
-            <!-- 大小(详细信息/平铺可见) -->
-            <TextBlock x:Name="SizeText" Text="{Binding SizeText}"
-                       Foreground="#FF999999" FontSize="9"
-                       TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                       Visibility="Collapsed"/>
-        </Grid>
-    </Border>
+        </Border>
+    </Grid>
 </UserControl>
