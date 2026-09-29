@@ -38,6 +38,11 @@ public partial class App : Application
         // 未处理异常守卫:任何意外都不让进程直接崩(稳定优先);同时落盘日志便于事后排查
         DispatcherUnhandledException += (_, args) =>
         {
+            if (IsBenignShutdownCrash(args.Exception))
+            {
+                args.Handled = true;
+                return;
+            }
             LogError(args.Exception, "DispatcherUnhandledException");
             var canContinue = CanContinueAfterDispatcherException(args.Exception)
                 || IsBenignAnimationFailure(args.Exception);
@@ -54,7 +59,10 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
             // 后台线程/致命异常(如 0xc0000005 访问违规)会到这里,记录以便事后排查
-            LogError(args.ExceptionObject as Exception, "AppDomain.UnhandledException");
+            var ex = args.ExceptionObject as Exception;
+            if (IsBenignShutdownCrash(ex)) return;
+            LogError(ex, "AppDomain.UnhandledException");
+            global::DesktopBox.Services.LogService.Flush();
         };
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
@@ -157,7 +165,7 @@ public partial class App : Application
     /// <summary>把异常(含内部异常链与堆栈)追加写入 AppPaths.LogPath,便于事后排查。</summary>
     public static void LogError(Exception? ex, string source)
     {
-        if (ex is null) return;
+        if (ex is null || IsBenignShutdownCrash(ex)) return;
         try { global::DesktopBox.Services.LogService.Error(ex, source); } catch { }
         try
         {
@@ -168,7 +176,11 @@ public partial class App : Application
             sb.AppendLine("================================================");
             sb.AppendLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] source={source}");
             AppendException(sb, ex, 0);
-            File.AppendAllText(path, sb.ToString());
+            using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+            using (var writer = new StreamWriter(stream, Encoding.UTF8))
+            {
+                writer.Write(sb.ToString());
+            }
         }
         catch { /* 写日志本身失败绝不能影响程序 */ }
     }
@@ -218,6 +230,12 @@ public partial class App : Application
         Win32Exception or
         OperationCanceledException;
 
+    internal static bool IsBenignShutdownCrash(Exception? exception) =>
+        exception is DllNotFoundException &&
+        (exception.StackTrace?.Contains("SingletonDomainUnload") == true ||
+         exception.StackTrace?.Contains("__std_type_info_destroy_list") == true ||
+         exception.StackTrace?.Contains("__scrt_uninitialize_type_info") == true);
+
     /// <summary>
     /// 良性动画失败兜底（纵深防御）：第三方样式（WPF-UI hover 动画）对 frozen 画刷跑
     /// Storyboard 会抛 InvalidOperationException。动画播不出来不影响任何状态，
@@ -234,7 +252,9 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         (Services as IDisposable)?.Dispose();
+        BeginShutdown();
         try { _mutex?.ReleaseMutex(); } catch { }
+        global::DesktopBox.Services.LogService.Flush();
         _mutex?.Dispose();
         _mutex = null;
         base.OnExit(e);

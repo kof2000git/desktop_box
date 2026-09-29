@@ -65,7 +65,6 @@ public sealed class BoxWindow : IDisposable
     private uint _pendingExtraFlags;
     private int _lastX = int.MinValue, _lastY = int.MinValue, _lastW, _lastH;
     private double _lastContentW, _lastContentH;
-    private DateTime _lastWriteLogUtc = DateTime.UtcNow;
 
     /// <summary>诊断快照：HWND/可见性/实际矩形/父窗口/模型坐标，用于定位"盒子不可见"。</summary>
     public string Describe()
@@ -188,14 +187,6 @@ public sealed class BoxWindow : IDisposable
         _lastY = clientPosition.Y;
         _lastW = w;
         _lastH = h;
-        // 诊断（拖动抖动调查）：记录每次真正的窗口写入。
-        var gap = (now - _lastWriteLogUtc).TotalMilliseconds;
-        if (gap >= 15)
-        {
-            _lastWriteLogUtc = now;
-            Services.LogService.Info("BoxWindow.Write",
-                $"hwnd=0x{_handle:X} rect=({clientPosition.X},{clientPosition.Y},{w}x{h}) dz={gap:0}ms noz={(extraFlags & Native.User32.SWP_NOZORDER) != 0}");
-        }
         // 交互拖动帧必须同步应用（无 ASYNCWINDOWPOS）：异步会把移动投递给 explorer
         // 线程按它自己的节奏消化，时序不均 + DWM 对旧表面的拉伸 = 拖影/抖动。
         // 已带 NOZORDER 不重排兄弟，同步是安全的；挂死风险由单独的 SendMessageTimeout 兜住。
